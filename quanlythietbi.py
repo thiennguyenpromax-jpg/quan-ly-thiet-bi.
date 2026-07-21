@@ -12,7 +12,9 @@ st.set_page_config(
 # Đường dẫn lưu trữ dữ liệu tập trung trên Server
 DATA_FILE = "data_store.json"
 
-cookie_manager = get_cookie_manager()
+# Khởi tạo Cookie Manager
+cookie_manager = stx.CookieManager()
+
 
 # Các hàm đọc/ghi dữ liệu JSON
 def load_all_data():
@@ -57,7 +59,9 @@ if not st.session_state.logged_in:
         with st.form("login_form"):
             user_input = st.text_input("Tên đăng nhập")
             pass_input = st.text_input("Mật khẩu", type="password")
-            remember_me = st.checkbox("Ghi nhớ đăng nhập trên thiết bị này", value=True)
+            remember_me = st.checkbox(
+                "Ghi nhớ đăng nhập trên thiết bị này", value=True
+            )
             btn_login = st.form_submit_button("Đăng nhập")
 
             if btn_login:
@@ -66,10 +70,13 @@ if not st.session_state.logged_in:
                         st.session_state.logged_in = True
                         st.session_state.username = user_input
 
-                        # Nếu chọn Ghi nhớ -> Lưu cookie trong 30 ngày
+                        # Lưu cookie trong 30 ngày nếu chọn ghi nhớ
                         if remember_me:
                             cookie_manager.set(
-                                "user_auth", user_input, key="set_cookie", max_age=30 * 24 * 3600
+                                "user_auth",
+                                user_input,
+                                key="set_cookie",
+                                max_age=30 * 24 * 3600,
                             )
 
                         st.success("Đăng nhập thành công!")
@@ -97,7 +104,9 @@ if not st.session_state.logged_in:
                         "media": [],
                     }
                     save_all_data(all_data)
-                    st.success("Đăng ký thành công! Bạn có thể đăng nhập ngay.")
+                    st.success(
+                        "Đăng ký thành công! Bạn có thể đăng nhập ngay."
+                    )
 
 # ==========================================
 # MÀN HÌNH CHÍNH (SAU KHI ĐĂNG NHẬP)
@@ -113,7 +122,6 @@ else:
     with col_logout:
         st.write("")
         if st.button("🚪 Đăng xuất"):
-            # Xóa Cookie và Session khi bấm Đăng xuất
             cookie_manager.delete("user_auth", key="delete_cookie")
             st.session_state.logged_in = False
             st.session_state.username = ""
@@ -167,7 +175,6 @@ else:
 
         st.divider()
 
-        # BỐ CỤC 3 CỘT: THÊM | CHỌN ĐỒ ĐI LÀM | GỘP SỬA & XÓA
         col_add, col_take, col_manage = st.columns(3)
 
         # 1. Thêm thiết bị mới
@@ -193,7 +200,7 @@ else:
                     st.success(f"Đã thêm: {g_name}")
                     st.rerun()
 
-        # 2. Chọn đồ đi làm (Cập nhật số lượng mang đi)
+        # 2. Chọn đồ đi làm
         with col_take:
             st.subheader("🚚 Chọn đồ đi làm")
             if gear_list:
@@ -226,7 +233,9 @@ else:
 
                     if btn_g_take:
                         if new_taken > max_qty:
-                            st.error(f"❌ Lỗi: Bạn chỉ có tổng cộng {max_qty} cái, không thể mang đi {new_taken}!")
+                            st.error(
+                                f"❌ Lỗi: Bạn chỉ có tổng cộng {max_qty} cái, không thể mang đi {new_taken}!"
+                            )
                         else:
                             gear_list[t_idx]["Đã mang đi"] = new_taken
                             all_data[user]["gear"] = gear_list
@@ -281,7 +290,9 @@ else:
 
                         if btn_edit:
                             if e_taken > e_total:
-                                st.error("❌ Lỗi: Số lượng mang đi không được lớn hơn tổng số lượng!")
+                                st.error(
+                                    "❌ Lỗi: Số lượng mang đi không được lớn hơn tổng số lượng!"
+                                )
                             else:
                                 gear_list[m_idx]["Tên thiết bị"] = e_name
                                 gear_list[m_idx]["Tổng số lượng"] = e_total
