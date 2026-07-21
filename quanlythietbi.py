@@ -1,5 +1,6 @@
 import json
 import os
+import extra_streamlit_components as stx
 import pandas as pd
 import streamlit as st
 
@@ -12,7 +13,16 @@ st.set_page_config(
 DATA_FILE = "data_store.json"
 
 
-# Các hàm đọc/ghi dữ liệu JSON thuần Python
+# Khởi tạo Cookie Manager
+@st.cache_resource(experimental_allow_widgets=True)
+def get_cookie_manager():
+    return stx.CookieManager()
+
+
+cookie_manager = get_cookie_manager()
+
+
+# Các hàm đọc/ghi dữ liệu JSON
 def load_all_data():
     if not os.path.exists(DATA_FILE):
         return {}
@@ -28,11 +38,20 @@ def save_all_data(data):
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 
-# Quản lý Session Đăng nhập
+# Quản lý Session & Cookie Đăng nhập
+auth_cookie = cookie_manager.get(cookie="user_auth")
+
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "username" not in st.session_state:
     st.session_state.username = ""
+
+# Tự động đăng nhập nếu tìm thấy Cookie trên thiết bị
+if not st.session_state.logged_in and auth_cookie:
+    all_data = load_all_data()
+    if auth_cookie in all_data:
+        st.session_state.logged_in = True
+        st.session_state.username = auth_cookie
 
 # ==========================================
 # MÀN HÌNH ĐĂNG NHẬP / ĐĂNG KÝ
@@ -46,6 +65,7 @@ if not st.session_state.logged_in:
         with st.form("login_form"):
             user_input = st.text_input("Tên đăng nhập")
             pass_input = st.text_input("Mật khẩu", type="password")
+            remember_me = st.checkbox("Ghi nhớ đăng nhập trên thiết bị này", value=True)
             btn_login = st.form_submit_button("Đăng nhập")
 
             if btn_login:
@@ -53,6 +73,13 @@ if not st.session_state.logged_in:
                     if all_data[user_input]["password"] == pass_input:
                         st.session_state.logged_in = True
                         st.session_state.username = user_input
+
+                        # Nếu chọn Ghi nhớ -> Lưu cookie trong 30 ngày
+                        if remember_me:
+                            cookie_manager.set(
+                                "user_auth", user_input, key="set_cookie", max_age=30 * 24 * 3600
+                            )
+
                         st.success("Đăng nhập thành công!")
                         st.rerun()
                     else:
@@ -94,6 +121,8 @@ else:
     with col_logout:
         st.write("")
         if st.button("🚪 Đăng xuất"):
+            # Xóa Cookie và Session khi bấm Đăng xuất
+            cookie_manager.delete("user_auth", key="delete_cookie")
             st.session_state.logged_in = False
             st.session_state.username = ""
             st.rerun()
@@ -190,7 +219,6 @@ else:
                     max_qty = int(gear_list[t_idx]["Tổng số lượng"])
                     curr_taken = int(gear_list[t_idx]["Đã mang đi"])
 
-                    # Ngăn chặn lỗi hiển thị nếu data cũ bị âm hoặc quá mức
                     if curr_taken > max_qty:
                         curr_taken = max_qty
 
