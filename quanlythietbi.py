@@ -70,7 +70,6 @@ if not st.session_state.logged_in:
                         st.session_state.logged_in = True
                         st.session_state.username = user_input
 
-                        # Lưu cookie trong 30 ngày nếu chọn ghi nhớ
                         if remember_me:
                             cookie_manager.set(
                                 "user_auth",
@@ -175,18 +174,19 @@ else:
 
         st.divider()
 
-        col_add, col_take, col_manage = st.columns(3)
+        # Chia giao diện làm 4 cột linh hoạt
+        col_add, col_take, col_return, col_manage = st.columns(4)
 
         # 1. Thêm thiết bị mới
         with col_add:
-            st.subheader("➕ Thêm thiết bị mới")
+            st.subheader("➕ Thêm mới")
             with st.form("add_g_form"):
                 g_name = st.text_input("Tên thiết bị")
                 g_total = st.number_input(
-                    "Tổng số lượng sở hữu", min_value=1, value=1, step=1
+                    "Tổng số lượng", min_value=1, value=1, step=1
                 )
-                g_loc = st.text_input("Vị trí cất giữ / Ghi chú")
-                btn_g_add = st.form_submit_button("Thêm mới")
+                g_loc = st.text_input("Vị trí / Ghi chú")
+                btn_g_add = st.form_submit_button("Thêm thiết bị")
 
                 if btn_g_add and g_name:
                     gear_list.append({
@@ -200,14 +200,15 @@ else:
                     st.success(f"Đã thêm: {g_name}")
                     st.rerun()
 
-        # 2. Chọn đồ đi làm
+        # 2. Mang đồ đi làm
         with col_take:
-            st.subheader("🚚 Chọn đồ đi làm")
+            st.subheader("🚚 Mang đồ đi")
             if gear_list:
                 with st.form("take_g_form"):
                     selected_take = st.selectbox(
-                        "Chọn thiết bị mang đi",
+                        "Chọn thiết bị đi làm",
                         [item["Tên thiết bị"] for item in gear_list],
+                        key="sb_take_gear",
                     )
                     t_idx = next(
                         i
@@ -217,38 +218,77 @@ else:
 
                     max_qty = int(gear_list[t_idx]["Tổng số lượng"])
                     curr_taken = int(gear_list[t_idx]["Đã mang đi"])
+                    available_qty = max_qty - curr_taken
 
-                    if curr_taken > max_qty:
-                        curr_taken = max_qty
+                    st.caption(
+                        f"Đang ở nhà: **{available_qty}** | Đã mang đi:"
+                        f" **{curr_taken}**"
+                    )
 
-                    new_taken = st.number_input(
-                        f"Số lượng MANG ĐI (Bạn đang có: {max_qty})",
+                    take_more = st.number_input(
+                        "Số lượng mang đi thêm",
                         min_value=0,
+                        max_value=max(0, available_qty),
+                        value=0,
+                        step=1,
+                    )
+                    btn_g_take = st.form_submit_button("Xác nhận mang đi")
+
+                    if btn_g_take and take_more > 0:
+                        gear_list[t_idx]["Đã mang đi"] = curr_taken + take_more
+                        all_data[user]["gear"] = gear_list
+                        save_all_data(all_data)
+                        st.success(f"Đã mang đi thêm {take_more} {selected_take}!")
+                        st.rerun()
+
+        # 3. Trả đồ về kho (MỚI THÊM)
+        with col_return:
+            st.subheader("↩️ Trả đồ về kho")
+            # Chỉ lọc ra các thiết bị đang có số lượng mang đi > 0
+            borrowed_gear = [
+                item for item in gear_list if int(item.get("Đã mang đi", 0)) > 0
+            ]
+
+            if borrowed_gear:
+                with st.form("return_g_form"):
+                    selected_return = st.selectbox(
+                        "Chọn thiết bị đã mang về",
+                        [item["Tên thiết bị"] for item in borrowed_gear],
+                        key="sb_return_gear",
+                    )
+                    r_idx = next(
+                        i
+                        for i, item in enumerate(gear_list)
+                        if item["Tên thiết bị"] == selected_return
+                    )
+
+                    curr_taken = int(gear_list[r_idx]["Đã mang đi"])
+                    st.caption(f"Đang mang đi ngoài đường: **{curr_taken}**")
+
+                    return_qty = st.number_input(
+                        "Số lượng trả về kho",
+                        min_value=1,
+                        max_value=curr_taken,
                         value=curr_taken,
                         step=1,
                     )
-                    btn_g_take = st.form_submit_button(
-                        "Cập nhật trạng thái mang đi"
-                    )
+                    btn_g_return = st.form_submit_button("✅ Cất về kho")
 
-                    if btn_g_take:
-                        if new_taken > max_qty:
-                            st.error(
-                                f"❌ Lỗi: Bạn chỉ có tổng cộng {max_qty} cái, không thể mang đi {new_taken}!"
-                            )
-                        else:
-                            gear_list[t_idx]["Đã mang đi"] = new_taken
-                            all_data[user]["gear"] = gear_list
-                            save_all_data(all_data)
-                            st.success(f"Đã cập nhật cho {selected_take}!")
-                            st.rerun()
+                    if btn_g_return:
+                        gear_list[r_idx]["Đã mang đi"] = curr_taken - return_qty
+                        all_data[user]["gear"] = gear_list
+                        save_all_data(all_data)
+                        st.success(f"Đã cất {return_qty} {selected_return} về kho!")
+                        st.rerun()
+            else:
+                st.info("Hiện không có thiết bị nào đang bị mang đi ngoài đường.")
 
-        # 3. Gộp Sửa & Xóa thiết bị
+        # 4. Gộp Sửa & Xóa thiết bị
         with col_manage:
-            st.subheader("⚙️ Quản lý (Sửa / Xóa)")
+            st.subheader("⚙️ Quản lý (Sửa/Xóa)")
             if gear_list:
                 selected_m = st.selectbox(
-                    "Chọn thiết bị muốn quản lý",
+                    "Chọn thiết bị",
                     [item["Tên thiết bị"] for item in gear_list],
                     key="select_manage_gear",
                 )
@@ -259,12 +299,12 @@ else:
                 )
 
                 action = st.radio(
-                    "Chọn thao tác:",
-                    ["✏️ Chỉnh sửa thông tin", "🗑️ Xóa thiết bị"],
+                    "Thao tác:",
+                    ["✏️ Sửa", "🗑️ Xóa"],
                     horizontal=True,
                 )
 
-                if action == "✏️ Chỉnh sửa thông tin":
+                if action == "✏️ Sửa":
                     with st.form("edit_g_form"):
                         e_name = st.text_input(
                             "Tên thiết bị",
@@ -291,7 +331,7 @@ else:
                         if btn_edit:
                             if e_taken > e_total:
                                 st.error(
-                                    "❌ Lỗi: Số lượng mang đi không được lớn hơn tổng số lượng!"
+                                    "❌ Lỗi: Số lượng mang đi không được lớn hơn tổng số!"
                                 )
                             else:
                                 gear_list[m_idx]["Tên thiết bị"] = e_name
@@ -300,12 +340,12 @@ else:
                                 gear_list[m_idx]["Vị trí / Ghi chú"] = e_loc
                                 all_data[user]["gear"] = gear_list
                                 save_all_data(all_data)
-                                st.success("Đã cập nhật thông tin!")
+                                st.success("Đã cập nhật!")
                                 st.rerun()
 
-                elif action == "🗑️ Xóa thiết bị":
-                    st.warning(f"Bạn có chắc muốn xóa '{selected_m}'?")
-                    if st.button("❌ Xác nhận xóa vĩnh viễn", type="primary"):
+                elif action == "🗑️ Xóa":
+                    st.warning(f"Xóa '{selected_m}'?")
+                    if st.button("❌ Xác nhận xóa", type="primary"):
                         user_data["gear"] = [
                             item
                             for item in gear_list
