@@ -190,10 +190,13 @@ else:
                     max_qty = int(gear_list[t_idx]["Tổng số lượng"])
                     curr_taken = int(gear_list[t_idx]["Đã mang đi"])
 
+                    # Ngăn chặn lỗi hiển thị nếu data cũ bị âm hoặc quá mức
+                    if curr_taken > max_qty:
+                        curr_taken = max_qty
+
                     new_taken = st.number_input(
-                        f"Số lượng ĐANG MANG ĐI (Tối đa: {max_qty})",
+                        f"Số lượng MANG ĐI (Bạn đang có: {max_qty})",
                         min_value=0,
-                        max_value=max_qty,
                         value=curr_taken,
                         step=1,
                     )
@@ -202,18 +205,21 @@ else:
                     )
 
                     if btn_g_take:
-                        gear_list[t_idx]["Đã mang đi"] = new_taken
-                        all_data[user]["gear"] = gear_list
-                        save_all_data(all_data)
-                        st.success(f"Đã cập nhật cho {selected_take}!")
-                        st.rerun()
+                        if new_taken > max_qty:
+                            st.error(f"❌ Lỗi: Bạn chỉ có tổng cộng {max_qty} cái, không thể mang đi {new_taken}!")
+                        else:
+                            gear_list[t_idx]["Đã mang đi"] = new_taken
+                            all_data[user]["gear"] = gear_list
+                            save_all_data(all_data)
+                            st.success(f"Đã cập nhật cho {selected_take}!")
+                            st.rerun()
 
         # 3. Gộp Sửa & Xóa thiết bị
         with col_manage:
             st.subheader("⚙️ Quản lý (Sửa / Xóa)")
             if gear_list:
                 selected_m = st.selectbox(
-                    "Chọn thiết bị muốn chỉnh sửa / xóa",
+                    "Chọn thiết bị muốn quản lý",
                     [item["Tên thiết bị"] for item in gear_list],
                     key="select_manage_gear",
                 )
@@ -223,7 +229,6 @@ else:
                     if item["Tên thiết bị"] == selected_m
                 )
 
-                # Cho người dùng chọn thao tác: Sửa hoặc Xóa
                 action = st.radio(
                     "Chọn thao tác:",
                     ["✏️ Chỉnh sửa thông tin", "🗑️ Xóa thiết bị"],
@@ -240,6 +245,13 @@ else:
                             "Tổng số lượng sở hữu",
                             min_value=0,
                             value=int(gear_list[m_idx]["Tổng số lượng"]),
+                            step=1,
+                        )
+                        e_taken = st.number_input(
+                            "Số lượng đã mang đi",
+                            min_value=0,
+                            value=int(gear_list[m_idx]["Đã mang đi"]),
+                            step=1,
                         )
                         e_loc = st.text_input(
                             "Vị trí / Ghi chú",
@@ -248,13 +260,17 @@ else:
                         btn_edit = st.form_submit_button("Lưu thay đổi")
 
                         if btn_edit:
-                            gear_list[m_idx]["Tên thiết bị"] = e_name
-                            gear_list[m_idx]["Tổng số lượng"] = e_total
-                            gear_list[m_idx]["Vị trí / Ghi chú"] = e_loc
-                            all_data[user]["gear"] = gear_list
-                            save_all_data(all_data)
-                            st.success("Đã cập nhật thông tin!")
-                            st.rerun()
+                            if e_taken > e_total:
+                                st.error("❌ Lỗi: Số lượng mang đi không được lớn hơn tổng số lượng!")
+                            else:
+                                gear_list[m_idx]["Tên thiết bị"] = e_name
+                                gear_list[m_idx]["Tổng số lượng"] = e_total
+                                gear_list[m_idx]["Đã mang đi"] = e_taken
+                                gear_list[m_idx]["Vị trí / Ghi chú"] = e_loc
+                                all_data[user]["gear"] = gear_list
+                                save_all_data(all_data)
+                                st.success("Đã cập nhật thông tin!")
+                                st.rerun()
 
                 elif action == "🗑️ Xóa thiết bị":
                     st.warning(f"Bạn có chắc muốn xóa '{selected_m}'?")
