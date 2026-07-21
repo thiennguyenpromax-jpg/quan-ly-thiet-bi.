@@ -12,13 +12,6 @@ st.set_page_config(
 # Đường dẫn lưu trữ dữ liệu tập trung trên Server
 DATA_FILE = "data_store.json"
 
-
-# Khởi tạo Cookie Manager
-@st.cache_resource(experimental_allow_widgets=True)
-def get_cookie_manager():
-    return stx.CookieManager()
-
-
 cookie_manager = get_cookie_manager()
 
 
