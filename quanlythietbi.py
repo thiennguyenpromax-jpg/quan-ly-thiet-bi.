@@ -14,7 +14,6 @@ DATA_FILE = "data_store.json"
 
 cookie_manager = get_cookie_manager()
 
-
 # Các hàm đọc/ghi dữ liệu JSON
 def load_all_data():
     if not os.path.exists(DATA_FILE):
