@@ -39,9 +39,7 @@ if "username" not in st.session_state:
 # ==========================================
 if not st.session_state.logged_in:
     st.title("🔐 Đăng Nhập Hệ Thống Quản Lý")
-
     tab_login, tab_register = st.tabs(["🔑 Đăng nhập", "📝 Đăng ký tài khoản"])
-
     all_data = load_all_data()
 
     with tab_login:
@@ -90,10 +88,9 @@ else:
     all_data = load_all_data()
     user_data = all_data.get(user, {"gear": [], "media": []})
 
-    # Thanh Tiêu Đề & Nút Đăng Xuất
     col_title, col_logout = st.columns([8, 2])
     with col_title:
-        st.title(f"🎬 Quản Lý Thiết Bị & File - [Tài khoản: {user}]")
+        st.title(f"🎬 Quản Lý Thiết Bị & File - [{user}]")
     with col_logout:
         st.write("")
         if st.button("🚪 Đăng xuất"):
@@ -145,21 +142,23 @@ else:
                 use_container_width=True,
             )
         else:
-            st.info("Chưa có thiết bị nào.")
+            st.info("Chưa có thiết bị nào trong hệ thống.")
 
         st.divider()
-        col_g_add, col_g_edit, col_g_del = st.columns(3)
 
-        # Thêm thiết bị
-        with col_g_add:
-            st.subheader("➕ Thêm thiết bị")
+        # BỐ CỤC 3 CỘT: THÊM | CHỌN ĐỒ ĐI LÀM | GỘP SỬA & XÓA
+        col_add, col_take, col_manage = st.columns(3)
+
+        # 1. Thêm thiết bị mới
+        with col_add:
+            st.subheader("➕ Thêm thiết bị mới")
             with st.form("add_g_form"):
                 g_name = st.text_input("Tên thiết bị")
                 g_total = st.number_input(
-                    "Tổng số lượng", min_value=1, value=1
+                    "Tổng số lượng sở hữu", min_value=1, value=1, step=1
                 )
-                g_loc = st.text_input("Vị trí / Ghi chú")
-                btn_g_add = st.form_submit_button("Thêm")
+                g_loc = st.text_input("Vị trí cất giữ / Ghi chú")
+                btn_g_add = st.form_submit_button("Thêm mới")
 
                 if btn_g_add and g_name:
                     gear_list.append({
@@ -170,74 +169,105 @@ else:
                     })
                     all_data[user]["gear"] = gear_list
                     save_all_data(all_data)
-                    st.success("Đã thêm thành công!")
+                    st.success(f"Đã thêm: {g_name}")
                     st.rerun()
 
-        # Sửa thiết bị
-        with col_g_edit:
-            st.subheader("✏️ Chỉnh sửa thiết bị")
+        # 2. Chọn đồ đi làm (Cập nhật số lượng mang đi)
+        with col_take:
+            st.subheader("🚚 Chọn đồ đi làm")
             if gear_list:
-                selected_g = st.selectbox(
-                    "Chọn thiết bị", [item["Tên thiết bị"] for item in gear_list]
-                )
-                item_idx = next(
-                    i
-                    for i, item in enumerate(gear_list)
-                    if item["Tên thiết bị"] == selected_g
-                )
+                with st.form("take_g_form"):
+                    selected_take = st.selectbox(
+                        "Chọn thiết bị mang đi",
+                        [item["Tên thiết bị"] for item in gear_list],
+                    )
+                    t_idx = next(
+                        i
+                        for i, item in enumerate(gear_list)
+                        if item["Tên thiết bị"] == selected_take
+                    )
 
-                with st.form("edit_g_form"):
-                    e_g_name = st.text_input(
-                        "Tên thiết bị", value=gear_list[item_idx]["Tên thiết bị"]
-                    )
-                    e_g_total = st.number_input(
-                        "Tổng số lượng",
-                        min_value=0,
-                        value=int(gear_list[item_idx]["Tổng số lượng"]),
-                    )
-                    e_g_taken = st.number_input(
-                        "Số lượng đang mang đi",
-                        min_value=0,
-                        max_value=int(e_g_total),
-                        value=int(gear_list[item_idx]["Đã mang đi"]),
-                    )
-                    e_g_loc = st.text_input(
-                        "Vị trí / Ghi chú",
-                        value=str(gear_list[item_idx]["Vị trí / Ghi chú"]),
-                    )
-                    btn_g_edit = st.form_submit_button("Lưu thay đổi")
+                    max_qty = int(gear_list[t_idx]["Tổng số lượng"])
+                    curr_taken = int(gear_list[t_idx]["Đã mang đi"])
 
-                    if btn_g_edit:
-                        gear_list[item_idx] = {
-                            "Tên thiết bị": e_g_name,
-                            "Tổng số lượng": e_g_total,
-                            "Đã mang đi": e_g_taken,
-                            "Vị trí / Ghi chú": e_g_loc,
-                        }
+                    new_taken = st.number_input(
+                        f"Số lượng ĐANG MANG ĐI (Tối đa: {max_qty})",
+                        min_value=0,
+                        max_value=max_qty,
+                        value=curr_taken,
+                        step=1,
+                    )
+                    btn_g_take = st.form_submit_button(
+                        "Cập nhật trạng thái mang đi"
+                    )
+
+                    if btn_g_take:
+                        gear_list[t_idx]["Đã mang đi"] = new_taken
                         all_data[user]["gear"] = gear_list
                         save_all_data(all_data)
-                        st.success("Cập nhật thành công!")
+                        st.success(f"Đã cập nhật cho {selected_take}!")
                         st.rerun()
 
-        # Xóa thiết bị
-        with col_g_del:
-            st.subheader("🗑️ Xóa thiết bị")
+        # 3. Gộp Sửa & Xóa thiết bị
+        with col_manage:
+            st.subheader("⚙️ Quản lý (Sửa / Xóa)")
             if gear_list:
-                del_g = st.selectbox(
-                    "Chọn thiết bị xóa",
+                selected_m = st.selectbox(
+                    "Chọn thiết bị muốn chỉnh sửa / xóa",
                     [item["Tên thiết bị"] for item in gear_list],
-                    key="del_g_key",
+                    key="select_manage_gear",
                 )
-                if st.button("❌ Xác nhận Xóa", type="primary"):
-                    user_data["gear"] = [
-                        item
-                        for item in gear_list
-                        if item["Tên thiết bị"] != del_g
-                    ]
-                    all_data[user] = user_data
-                    save_all_data(all_data)
-                    st.success("Đã xóa!")
-                    st.rerun()
+                m_idx = next(
+                    i
+                    for i, item in enumerate(gear_list)
+                    if item["Tên thiết bị"] == selected_m
+                )
+
+                # Cho người dùng chọn thao tác: Sửa hoặc Xóa
+                action = st.radio(
+                    "Chọn thao tác:",
+                    ["✏️ Chỉnh sửa thông tin", "🗑️ Xóa thiết bị"],
+                    horizontal=True,
+                )
+
+                if action == "✏️ Chỉnh sửa thông tin":
+                    with st.form("edit_g_form"):
+                        e_name = st.text_input(
+                            "Tên thiết bị",
+                            value=gear_list[m_idx]["Tên thiết bị"],
+                        )
+                        e_total = st.number_input(
+                            "Tổng số lượng sở hữu",
+                            min_value=0,
+                            value=int(gear_list[m_idx]["Tổng số lượng"]),
+                        )
+                        e_loc = st.text_input(
+                            "Vị trí / Ghi chú",
+                            value=str(gear_list[m_idx]["Vị trí / Ghi chú"]),
+                        )
+                        btn_edit = st.form_submit_button("Lưu thay đổi")
+
+                        if btn_edit:
+                            gear_list[m_idx]["Tên thiết bị"] = e_name
+                            gear_list[m_idx]["Tổng số lượng"] = e_total
+                            gear_list[m_idx]["Vị trí / Ghi chú"] = e_loc
+                            all_data[user]["gear"] = gear_list
+                            save_all_data(all_data)
+                            st.success("Đã cập nhật thông tin!")
+                            st.rerun()
+
+                elif action == "🗑️ Xóa thiết bị":
+                    st.warning(f"Bạn có chắc muốn xóa '{selected_m}'?")
+                    if st.button("❌ Xác nhận xóa vĩnh viễn", type="primary"):
+                        user_data["gear"] = [
+                            item
+                            for item in gear_list
+                            if item["Tên thiết bị"] != selected_m
+                        ]
+                        all_data[user] = user_data
+                        save_all_data(all_data)
+                        st.success(f"Đã xóa: {selected_m}")
+                        st.rerun()
 
     # ------------------------------------------
     # TAB 2: QUẢN LÝ FILE VIDEO
@@ -265,20 +295,20 @@ else:
             st.info("Chưa có thông tin file video.")
 
         st.divider()
-        col_m_add, col_m_edit, col_m_del = st.columns(3)
+        col_m_add, col_m_manage = st.columns(2)
 
         # Thêm file video
         with col_m_add:
-            st.subheader("📝 Thêm file video")
+            st.subheader("📝 Thêm file video mới")
             with st.form("add_m_form"):
                 m_date = st.date_input("Ngày quay")
-                m_proj = st.text_input("Tên dự án")
-                m_store = st.text_input("Nơi lưu trữ")
+                m_proj = st.text_input("Tên dự án / Nội dung quay")
+                m_store = st.text_input("Nơi lưu trữ (Ổ cứng, Cloud...)")
                 m_type = st.selectbox(
                     "Định dạng", ["4K MP4", "1080p MP4", "RAW/LOG", "Khác"]
                 )
                 m_note = st.text_area("Ghi chú")
-                btn_m_add = st.form_submit_button("Lưu File")
+                btn_m_add = st.form_submit_button("Lưu thông tin File")
 
                 if btn_m_add and m_proj:
                     media_list.append({
@@ -293,66 +323,73 @@ else:
                     st.success("Đã lưu thành công!")
                     st.rerun()
 
-        # Sửa file video
-        with col_m_edit:
-            st.subheader("✏️ Chỉnh sửa file")
+        # Gộp Sửa & Xóa File video
+        with col_m_manage:
+            st.subheader("⚙️ Quản lý File (Sửa / Xóa)")
             if media_list:
-                selected_m = st.selectbox(
-                    "Chọn dự án",
+                selected_media = st.selectbox(
+                    "Chọn dự án / file",
                     [item["Dự án / Tên Video"] for item in media_list],
+                    key="select_manage_media",
                 )
-                m_idx = next(
+                media_idx = next(
                     i
                     for i, item in enumerate(media_list)
-                    if item["Dự án / Tên Video"] == selected_m
+                    if item["Dự án / Tên Video"] == selected_media
                 )
 
-                with st.form("edit_m_form"):
-                    e_m_proj = st.text_input(
-                        "Tên dự án",
-                        value=media_list[m_idx]["Dự án / Tên Video"],
-                    )
-                    e_m_store = st.text_input(
-                        "Nơi lưu trữ",
-                        value=str(media_list[m_idx]["Nơi lưu trữ"]),
-                    )
-                    e_m_type = st.text_input(
-                        "Định dạng", value=str(media_list[m_idx]["Định dạng"])
-                    )
-                    e_m_note = st.text_area(
-                        "Ghi chú", value=str(media_list[m_idx]["Ghi chú"])
-                    )
-                    btn_m_edit = st.form_submit_button("Lưu thay đổi")
+                m_action = st.radio(
+                    "Chọn thao tác file:",
+                    ["✏️ Chỉnh sửa thông tin", "🗑️ Xóa file"],
+                    horizontal=True,
+                    key="media_action_radio",
+                )
 
-                    if btn_m_edit:
-                        media_list[m_idx] = {
-                            "Ngày quay": media_list[m_idx]["Ngày quay"],
-                            "Dự án / Tên Video": e_m_proj,
-                            "Nơi lưu trữ": e_m_store,
-                            "Định dạng": e_m_type,
-                            "Ghi chú": e_m_note,
-                        }
-                        all_data[user]["media"] = media_list
+                if m_action == "✏️ Chỉnh sửa thông tin":
+                    with st.form("edit_m_form"):
+                        e_m_proj = st.text_input(
+                            "Tên dự án",
+                            value=media_list[media_idx]["Dự án / Tên Video"],
+                        )
+                        e_m_store = st.text_input(
+                            "Nơi lưu trữ",
+                            value=str(media_list[media_idx]["Nơi lưu trữ"]),
+                        )
+                        e_m_type = st.text_input(
+                            "Định dạng",
+                            value=str(media_list[media_idx]["Định dạng"]),
+                        )
+                        e_m_note = st.text_area(
+                            "Ghi chú",
+                            value=str(media_list[media_idx]["Ghi chú"]),
+                        )
+                        btn_m_edit = st.form_submit_button("Lưu thay đổi")
+
+                        if btn_m_edit:
+                            media_list[media_idx]["Dự án / Tên Video"] = (
+                                e_m_proj
+                            )
+                            media_list[media_idx]["Nơi lưu trữ"] = e_m_store
+                            media_list[media_idx]["Định dạng"] = e_m_type
+                            media_list[media_idx]["Ghi chú"] = e_m_note
+                            all_data[user]["media"] = media_list
+                            save_all_data(all_data)
+                            st.success("Đã cập nhật file!")
+                            st.rerun()
+
+                elif m_action == "🗑️ Xóa file":
+                    st.warning(f"Bạn có chắc muốn xóa dự án '{selected_media}'?")
+                    if st.button(
+                        "❌ Xác nhận xóa dự án này",
+                        type="primary",
+                        key="btn_del_media",
+                    ):
+                        user_data["media"] = [
+                            item
+                            for item in media_list
+                            if item["Dự án / Tên Video"] != selected_media
+                        ]
+                        all_data[user] = user_data
                         save_all_data(all_data)
-                        st.success("Đã cập nhật!")
+                        st.success(f"Đã xóa: {selected_media}")
                         st.rerun()
-
-        # Xóa file video
-        with col_m_del:
-            st.subheader("🗑️ Xóa file")
-            if media_list:
-                del_m = st.selectbox(
-                    "Chọn dự án xóa",
-                    [item["Dự án / Tên Video"] for item in media_list],
-                    key="del_m_key",
-                )
-                if st.button("❌ Xác nhận Xóa File", type="primary"):
-                    user_data["media"] = [
-                        item
-                        for item in media_list
-                        if item["Dự án / Tên Video"] != del_m
-                    ]
-                    all_data[user] = user_data
-                    save_all_data(all_data)
-                    st.success("Đã xóa!")
-                    st.rerun()
