@@ -28,14 +28,8 @@ def init_supabase():
 
 supabase = init_supabase()
 
-
-# Khởi tạo Cookie Manager để lưu phiên đăng nhập
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager()
-
-
-cookie_manager = get_cookie_manager()
+# Khởi tạo Cookie Manager để lưu phiên đăng nhập (Không dùng @st.cache_resource)
+cookie_manager = stx.CookieManager()
 
 
 # ------------------------------------------
