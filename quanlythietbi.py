@@ -1,4 +1,3 @@
-import bcrypt
 import extra_streamlit_components as stx
 import pandas as pd
 import streamlit as st
@@ -11,6 +10,7 @@ st.set_page_config(
     page_title="Hệ Thống Quản Lý Thiết Bị", page_icon="🎬", layout="wide"
 )
 
+# Lấy cấu hình kết nối từ Streamlit Secrets
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 
@@ -19,7 +19,8 @@ SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 def init_supabase():
     if not SUPABASE_URL or not SUPABASE_KEY:
         st.error(
-            "⚠️ Chưa cấu hình Secrets (SUPABASE_URL và SUPABASE_KEY) trên Streamlit Cloud!"
+            "⚠️ Chưa cấu hình Secrets (SUPABASE_URL và SUPABASE_KEY) trên"
+            " Streamlit Cloud!"
         )
         st.stop()
     return create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -27,28 +28,8 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# Khởi tạo Cookie Manager
+# Khởi tạo Cookie Manager để lưu phiên đăng nhập (Không dùng @st.cache_resource)
 cookie_manager = stx.CookieManager()
-
-
-# ------------------------------------------
-# HÀM BẢO MẬT MẬT KHẨU (BCRYPT)
-# ------------------------------------------
-def hash_password(password: str) -> str:
-    """Mã hóa mật khẩu"""
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode(
-        "utf-8"
-    )
-
-
-def check_password(password: str, hashed_password: str) -> bool:
-    """Kiểm tra mật khẩu có khớp với bản mã hóa không"""
-    try:
-        return bcrypt.checkpw(
-            password.encode("utf-8"), hashed_password.encode("utf-8")
-        )
-    except Exception:
-        return False
 
 
 # ------------------------------------------
@@ -71,14 +52,18 @@ def load_user_data(username):
         return None
 
 
-def save_user_data(username, password_hash, gear, media):
+# Cập nhật hàm save để hỗ trợ thêm trường payroll (danh sách nhân viên & lương)
+def save_user_data(username, password, gear, media, payroll=None):
     """Thêm mới hoặc cập nhật dữ liệu user vào Supabase"""
     try:
+        if payroll is None:
+            payroll = []
         data = {
             "username": username,
-            "password": password_hash,
+            "password": password,
             "gear": gear,
             "media": media,
+            "payroll": payroll,
         }
         supabase.table("user_data").upsert(data).execute()
     except Exception as e:
@@ -93,7 +78,7 @@ if "logged_in" not in st.session_state:
 if "username" not in st.session_state:
     st.session_state.username = ""
 
-# Đọc Cookie tự động đăng nhập
+# Kiểm tra cookie để tự động đăng nhập khi mở lại trang
 auth_cookie = cookie_manager.get(cookie="user_auth")
 if not st.session_state.logged_in and auth_cookie:
     user_info = load_user_data(auth_cookie)
@@ -120,8 +105,7 @@ if not st.session_state.logged_in:
             if btn_login:
                 user_info = load_user_data(user_input)
                 if user_info:
-                    # Kiểm tra mật khẩu mã hóa bcrypt
-                    if check_password(pass_input, user_info["password"]):
+                    if user_info["password"] == pass_input:
                         st.session_state.logged_in = True
                         st.session_state.username = user_input
 
@@ -154,9 +138,8 @@ if not st.session_state.logged_in:
                     if existing_user:
                         st.error("Tên đăng nhập này đã tồn tại!")
                     else:
-                        # Hashing mật khẩu trước khi lưu
-                        hashed_p = hash_password(reg_pass)
-                        save_user_data(reg_user, hashed_p, [], [])
+                        # Thêm cột payroll trống mặc định khi đăng ký
+                        save_user_data(reg_user, reg_pass, [], [], [])
                         st.success(
                             "Đăng ký thành công! Bạn có thể đăng nhập ngay."
                         )
@@ -170,15 +153,17 @@ else:
         "password": "",
         "gear": [],
         "media": [],
+        "payroll": [],
     }
 
     gear_list = user_info.get("gear", [])
     media_list = user_info.get("media", [])
-    user_pass_hash = user_info.get("password", "")
+    payroll_list = user_info.get("payroll", [])
+    user_pass = user_info.get("password", "")
 
     col_title, col_logout = st.columns([8, 2])
     with col_title:
-        st.title(f"🎬 Quản Lý Thiết Bị & File - [{user}]")
+        st.title(f"🎬 Quản Lý Thiết Bị, File & Tiền Lương - [{user}]")
     with col_logout:
         st.write("")
         if st.button("🚪 Đăng xuất"):
@@ -187,7 +172,11 @@ else:
             st.session_state.username = ""
             st.rerun()
 
-    tab1, tab2 = st.tabs(["📦 1. Quản Lý Thiết Bị", "📁 2. Quản Lý File Video"])
+    tab1, tab2, tab3 = st.tabs([
+        "📦 1. Quản Lý Thiết Bị",
+        "📁 2. Quản Lý File Video",
+        "💰 3. Quản Lý Tiền Lương",
+    ])
 
     # ------------------------------------------
     # TAB 1: QUẢN LÝ THIẾT BỊ
@@ -214,9 +203,7 @@ else:
                 lambda x: "🟢 Sẵn sàng"
                 if x > 0
                 else (
-                    "🔴 Hết hàng / Đã mang đi"
-                    if x == 0
-                    else "⚠️ Lỗi số lượng"
+                    "🔴 Hết hàng / Đã mang đi" if x == 0 else "⚠️ Lỗi số lượng"
                 )
             )
 
@@ -238,37 +225,29 @@ else:
 
         col_add, col_take, col_return, col_manage = st.columns(4)
 
-        # 1. Thêm thiết bị mới
         with col_add:
             st.subheader("➕ Thêm mới")
             with st.form("add_g_form"):
-                g_name = st.text_input("Tên thiết bị").strip()
+                g_name = st.text_input("Tên thiết bị")
                 g_total = st.number_input(
                     "Tổng số lượng", min_value=1, value=1, step=1
                 )
-                g_loc = st.text_input("Vị trí / Ghi chú").strip()
+                g_loc = st.text_input("Vị trí / Ghi chú")
                 btn_g_add = st.form_submit_button("Thêm thiết bị")
 
                 if btn_g_add and g_name:
-                    # Kiểm tra trùng tên thiết bị
-                    if any(
-                        item["Tên thiết bị"] == g_name for item in gear_list
-                    ):
-                        st.error("Tên thiết bị này đã tồn tại!")
-                    else:
-                        gear_list.append({
-                            "Tên thiết bị": g_name,
-                            "Tổng số lượng": g_total,
-                            "Đã mang đi": 0,
-                            "Vị trí / Ghi chú": g_loc,
-                        })
-                        save_user_data(
-                            user, user_pass_hash, gear_list, media_list
-                        )
-                        st.success(f"Đã thêm: {g_name}")
-                        st.rerun()
+                    gear_list.append({
+                        "Tên thiết bị": g_name,
+                        "Tổng số lượng": g_total,
+                        "Đã mang đi": 0,
+                        "Vị trí / Ghi chú": g_loc,
+                    })
+                    save_user_data(
+                        user, user_pass, gear_list, media_list, payroll_list
+                    )
+                    st.success(f"Đã thêm: {g_name}")
+                    st.rerun()
 
-        # 2. Mang đồ đi làm
         with col_take:
             st.subheader("🚚 Mang đồ đi")
             if gear_list:
@@ -279,46 +258,43 @@ else:
                         key="sb_take_gear",
                     )
                     t_idx = next(
-                        (
-                            i
-                            for i, item in enumerate(gear_list)
-                            if item["Tên thiết bị"] == selected_take
-                        ),
-                        None,
+                        i
+                        for i, item in enumerate(gear_list)
+                        if item["Tên thiết bị"] == selected_take
                     )
 
-                    if t_idx is not None:
-                        max_qty = int(gear_list[t_idx]["Tổng số lượng"])
-                        curr_taken = int(gear_list[t_idx]["Đã mang đi"])
-                        available_qty = max_qty - curr_taken
+                    max_qty = int(gear_list[t_idx]["Tổng số lượng"])
+                    curr_taken = int(gear_list[t_idx]["Đã mang đi"])
+                    available_qty = max_qty - curr_taken
 
-                        st.caption(
-                            f"Đang ở nhà: **{available_qty}** | Đã mang đi:"
-                            f" **{curr_taken}**"
+                    st.caption(
+                        f"Đang ở nhà: **{available_qty}** | Đã mang đi:"
+                        f" **{curr_taken}**"
+                    )
+
+                    take_more = st.number_input(
+                        "Số lượng mang đi thêm",
+                        min_value=0,
+                        max_value=max(0, available_qty),
+                        value=0,
+                        step=1,
+                    )
+                    btn_g_take = st.form_submit_button("Xác nhận mang đi")
+
+                    if btn_g_take and take_more > 0:
+                        gear_list[t_idx]["Đã mang đi"] = curr_taken + take_more
+                        save_user_data(
+                            user,
+                            user_pass,
+                            gear_list,
+                            media_list,
+                            payroll_list,
                         )
-
-                        take_more = st.number_input(
-                            "Số lượng mang đi thêm",
-                            min_value=0,
-                            max_value=max(0, available_qty),
-                            value=0,
-                            step=1,
+                        st.success(
+                            f"Đã mang đi thêm {take_more} {selected_take}!"
                         )
-                        btn_g_take = st.form_submit_button("Xác nhận mang đi")
+                        st.rerun()
 
-                        if btn_g_take and take_more > 0:
-                            gear_list[t_idx]["Đã mang đi"] = (
-                                curr_taken + take_more
-                            )
-                            save_user_data(
-                                user, user_pass_hash, gear_list, media_list
-                            )
-                            st.success(
-                                f"Đã mang đi thêm {take_more} {selected_take}!"
-                            )
-                            st.rerun()
-
-        # 3. Trả đồ về kho
         with col_return:
             st.subheader("↩️ Trả đồ về kho")
             borrowed_gear = [
@@ -335,44 +311,41 @@ else:
                         key="sb_return_gear",
                     )
                     r_idx = next(
-                        (
-                            i
-                            for i, item in enumerate(gear_list)
-                            if item["Tên thiết bị"] == selected_return
-                        ),
-                        None,
+                        i
+                        for i, item in enumerate(gear_list)
+                        if item["Tên thiết bị"] == selected_return
                     )
 
-                    if r_idx is not None:
-                        curr_taken = int(gear_list[r_idx]["Đã mang đi"])
-                        st.caption(
-                            f"Đang mang đi ngoài đường: **{curr_taken}**"
-                        )
+                    curr_taken = int(gear_list[r_idx]["Đã mang đi"])
+                    st.caption(f"Đang mang đi ngoài đường: **{curr_taken}**")
 
-                        return_qty = st.number_input(
-                            "Số lượng trả về kho",
-                            min_value=1,
-                            max_value=curr_taken,
-                            value=curr_taken,
-                            step=1,
-                        )
-                        btn_g_return = st.form_submit_button("✅ Cất về kho")
+                    return_qty = st.number_input(
+                        "Số lượng trả về kho",
+                        min_value=1,
+                        max_value=curr_taken,
+                        value=curr_taken,
+                        step=1,
+                    )
+                    btn_g_return = st.form_submit_button("✅ Cất về kho")
 
-                        if btn_g_return:
-                            gear_list[r_idx]["Đã mang đi"] = (
-                                curr_taken - return_qty
-                            )
-                            save_user_data(
-                                user, user_pass_hash, gear_list, media_list
-                            )
-                            st.success(
-                                f"Đã cất {return_qty} {selected_return} về kho!"
-                            )
-                            st.rerun()
+                    if btn_g_return:
+                        gear_list[r_idx]["Đã mang đi"] = (
+                            curr_taken - return_qty
+                        )
+                        save_user_data(
+                            user,
+                            user_pass,
+                            gear_list,
+                            media_list,
+                            payroll_list,
+                        )
+                        st.success(
+                            f"Đã cất {return_qty} {selected_return} về kho!"
+                        )
+                        st.rerun()
             else:
                 st.info("Hiện không có thiết bị nào đang bị mang đi.")
 
-        # 4. Quản lý (Sửa / Xóa)
         with col_manage:
             st.subheader("⚙️ Quản lý (Sửa/Xóa)")
             if gear_list:
@@ -382,80 +355,72 @@ else:
                     key="select_manage_gear",
                 )
                 m_idx = next(
-                    (
-                        i
-                        for i, item in enumerate(gear_list)
-                        if item["Tên thiết bị"] == selected_m
-                    ),
-                    None,
+                    i
+                    for i, item in enumerate(gear_list)
+                    if item["Tên thiết bị"] == selected_m
                 )
 
-                if m_idx is not None:
-                    action = st.radio(
-                        "Thao tác:", ["✏️ Sửa", "🗑️ Xóa"], horizontal=True
-                    )
+                action = st.radio(
+                    "Thao tác:", ["✏️ Sửa", "🗑️ Xóa"], horizontal=True
+                )
 
-                    if action == "✏️ Sửa":
-                        with st.form("edit_g_form"):
-                            e_name = st.text_input(
-                                "Tên thiết bị",
-                                value=gear_list[m_idx]["Tên thiết bị"],
-                            ).strip()
-                            e_total = st.number_input(
-                                "Tổng số lượng sở hữu",
-                                min_value=0,
-                                value=int(gear_list[m_idx]["Tổng số lượng"]),
-                                step=1,
-                            )
-                            e_taken = st.number_input(
-                                "Số lượng đã mang đi",
-                                min_value=0,
-                                value=int(gear_list[m_idx]["Đã mang đi"]),
-                                step=1,
-                            )
-                            e_loc = st.text_input(
-                                "Vị trí / Ghi chú",
-                                value=str(
-                                    gear_list[m_idx]["Vị trí / Ghi chú"]
-                                ),
-                            ).strip()
-                            btn_edit = st.form_submit_button("Lưu thay đổi")
+                if action == "✏️ Sửa":
+                    with st.form("edit_g_form"):
+                        e_name = st.text_input(
+                            "Tên thiết bị",
+                            value=gear_list[m_idx]["Tên thiết bị"],
+                        )
+                        e_total = st.number_input(
+                            "Tổng số lượng sở hữu",
+                            min_value=0,
+                            value=int(gear_list[m_idx]["Tổng số lượng"]),
+                            step=1,
+                        )
+                        e_taken = st.number_input(
+                            "Số lượng đã mang đi",
+                            min_value=0,
+                            value=int(gear_list[m_idx]["Đã mang đi"]),
+                            step=1,
+                        )
+                        e_loc = st.text_input(
+                            "Vị trí / Ghi chú",
+                            value=str(gear_list[m_idx]["Vị trí / Ghi chú"]),
+                        )
+                        btn_edit = st.form_submit_button("Lưu thay đổi")
 
-                            if btn_edit:
-                                if e_taken > e_total:
-                                    st.error(
-                                        "❌ Số lượng mang đi vượt quá tổng"
-                                        " số!"
-                                    )
-                                else:
-                                    gear_list[m_idx]["Tên thiết bị"] = e_name
-                                    gear_list[m_idx]["Tổng số lượng"] = e_total
-                                    gear_list[m_idx]["Đã mang đi"] = e_taken
-                                    gear_list[m_idx]["Vị trí / Ghi chú"] = (
-                                        e_loc
-                                    )
-                                    save_user_data(
-                                        user,
-                                        user_pass_hash,
-                                        gear_list,
-                                        media_list,
-                                    )
-                                    st.success("Đã cập nhật!")
-                                    st.rerun()
+                        if btn_edit:
+                            if e_taken > e_total:
+                                st.error(
+                                    "❌ Số lượng mang đi vượt quá tổng số!"
+                                )
+                            else:
+                                gear_list[m_idx]["Tên thiết bị"] = e_name
+                                gear_list[m_idx]["Tổng số lượng"] = e_total
+                                gear_list[m_idx]["Đã mang đi"] = e_taken
+                                gear_list[m_idx]["Vị trí / Ghi chú"] = e_loc
+                                save_user_data(
+                                    user,
+                                    user_pass,
+                                    gear_list,
+                                    media_list,
+                                    payroll_list,
+                                )
+                                st.success("Đã cập nhật!")
+                                st.rerun()
 
-                    elif action == "🗑️ Xóa":
-                        st.warning(f"Xóa '{selected_m}'?")
-                        if st.button("❌ Xác nhận xóa", type="primary"):
-                            gear_list = [
-                                item
-                                for item in gear_list
-                                if item["Tên thiết bị"] != selected_m
-                            ]
-                            save_user_data(
-                                user, user_pass_hash, gear_list, media_list
-                            )
-                            st.success(f"Đã xóa: {selected_m}")
-                            st.rerun()
+                elif action == "🗑️ Xóa":
+                    st.warning(f"Xóa '{selected_m}'?")
+                    if st.button("❌ Xác nhận xóa", type="primary"):
+                        gear_list = [
+                            item
+                            for item in gear_list
+                            if item["Tên thiết bị"] != selected_m
+                        ]
+                        save_user_data(
+                            user, user_pass, gear_list, media_list, payroll_list
+                        )
+                        st.success(f"Đã xóa: {selected_m}")
+                        st.rerun()
 
     # ------------------------------------------
     # TAB 2: QUẢN LÝ FILE VIDEO
@@ -484,19 +449,16 @@ else:
         st.divider()
         col_m_add, col_m_manage = st.columns(2)
 
-        # Thêm file video mới
         with col_m_add:
             st.subheader("📝 Thêm file video mới")
             with st.form("add_m_form"):
                 m_date = st.date_input("Ngày quay")
-                m_proj = st.text_input("Tên dự án / Nội dung quay").strip()
-                m_store = st.text_input(
-                    "Nơi lưu trữ (Ổ cứng, Cloud...)"
-                ).strip()
+                m_proj = st.text_input("Tên dự án / Nội dung quay")
+                m_store = st.text_input("Nơi lưu trữ (Ổ cứng, Cloud...)")
                 m_type = st.selectbox(
                     "Định dạng", ["4K MP4", "1080p MP4", "RAW/LOG", "Khác"]
                 )
-                m_note = st.text_area("Ghi chú").strip()
+                m_note = st.text_area("Ghi chú")
                 btn_m_add = st.form_submit_button("Lưu thông tin File")
 
                 if btn_m_add and m_proj:
@@ -507,11 +469,12 @@ else:
                         "Định dạng": m_type,
                         "Ghi chú": m_note,
                     })
-                    save_user_data(user, user_pass_hash, gear_list, media_list)
+                    save_user_data(
+                        user, user_pass, gear_list, media_list, payroll_list
+                    )
                     st.success("Đã lưu thành công!")
                     st.rerun()
 
-        # Quản lý (Sửa/Xóa) file video
         with col_m_manage:
             st.subheader("⚙️ Quản lý File (Sửa / Xóa)")
             if media_list:
@@ -521,71 +484,165 @@ else:
                     key="select_manage_media",
                 )
                 media_idx = next(
-                    (
-                        i
-                        for i, item in enumerate(media_list)
-                        if item["Dự án / Tên Video"] == selected_media
-                    ),
-                    None,
+                    i
+                    for i, item in enumerate(media_list)
+                    if item["Dự án / Tên Video"] == selected_media
                 )
 
-                if media_idx is not None:
-                    m_action = st.radio(
-                        "Thao tác file:",
-                        ["✏️ Chỉnh sửa", "🗑️ Xóa file"],
-                        horizontal=True,
-                        key="media_action_radio",
-                    )
+                m_action = st.radio(
+                    "Thao tác file:",
+                    ["✏️ Chỉnh sửa", "🗑️ Xóa file"],
+                    horizontal=True,
+                    key="media_action_radio",
+                )
 
-                    if m_action == "✏️ Chỉnh sửa":
-                        with st.form("edit_m_form"):
-                            e_m_proj = st.text_input(
-                                "Tên dự án",
-                                value=media_list[media_idx]["Dự án / Tên Video"],
-                            ).strip()
-                            e_m_store = st.text_input(
-                                "Nơi lưu trữ",
-                                value=str(
-                                    media_list[media_idx]["Nơi lưu trữ"]
-                                ),
-                            ).strip()
-                            e_m_type = st.text_input(
-                                "Định dạng",
-                                value=str(media_list[media_idx]["Định dạng"]),
-                            ).strip()
-                            e_m_note = st.text_area(
-                                "Ghi chú",
-                                value=str(media_list[media_idx]["Ghi chú"]),
-                            ).strip()
-                            btn_m_edit = st.form_submit_button("Lưu thay đổi")
+                if m_action == "✏️ Chỉnh sửa":
+                    with st.form("edit_m_form"):
+                        e_m_proj = st.text_input(
+                            "Tên dự án",
+                            value=media_list[media_idx]["Dự án / Tên Video"],
+                        )
+                        e_m_store = st.text_input(
+                            "Nơi lưu trữ",
+                            value=str(media_list[media_idx]["Nơi lưu trữ"]),
+                        )
+                        e_m_type = st.text_input(
+                            "Định dạng",
+                            value=str(media_list[media_idx]["Định dạng"]),
+                        )
+                        e_m_note = st.text_area(
+                            "Ghi chú",
+                            value=str(media_list[media_idx]["Ghi chú"]),
+                        )
+                        btn_m_edit = st.form_submit_button("Lưu thay đổi")
 
-                            if btn_m_edit:
-                                media_list[media_idx]["Dự án / Tên Video"] = (
-                                    e_m_proj
-                                )
-                                media_list[media_idx]["Nơi lưu trữ"] = e_m_store
-                                media_list[media_idx]["Định dạng"] = e_m_type
-                                media_list[media_idx]["Ghi chú"] = e_m_note
-                                save_user_data(
-                                    user, user_pass_hash, gear_list, media_list
-                                )
-                                st.success("Đã cập nhật file!")
-                                st.rerun()
-
-                    elif m_action == "🗑️ Xóa file":
-                        st.warning(f"Xóa dự án '{selected_media}'?")
-                        if st.button(
-                            "❌ Xác nhận xóa",
-                            type="primary",
-                            key="btn_del_media",
-                        ):
-                            media_list = [
-                                item
-                                for item in media_list
-                                if item["Dự án / Tên Video"] != selected_media
-                            ]
-                            save_user_data(
-                                user, user_pass_hash, gear_list, media_list
+                        if btn_m_edit:
+                            media_list[media_idx]["Dự án / Tên Video"] = (
+                                e_m_proj
                             )
-                            st.success(f"Đã xóa: {selected_media}")
+                            media_list[media_idx]["Nơi lưu trữ"] = e_m_store
+                            media_list[media_idx]["Định dạng"] = e_m_type
+                            media_list[media_idx]["Ghi chú"] = e_m_note
+                            save_user_data(
+                                user,
+                                user_pass,
+                                gear_list,
+                                media_list,
+                                payroll_list,
+                            )
+                            st.success("Đã cập nhật file!")
                             st.rerun()
+
+                elif m_action == "🗑️ Xóa file":
+                    st.warning(f"Xóa dự án '{selected_media}'?")
+                    if st.button(
+                        "❌ Xác nhận xóa", type="primary", key="btn_del_media"
+                    ):
+                        media_list = [
+                            item
+                            for item in media_list
+                            if item["Dự án / Tên Video"] != selected_media
+                        ]
+                        save_user_data(
+                            user, user_pass, gear_list, media_list, payroll_list
+                        )
+                        st.success(f"Đã xóa: {selected_media}")
+                        st.rerun()
+
+    # ------------------------------------------
+    # TAB 3: QUẢN LÝ TIỀN LƯƠNG (THEO YÊU CẦU PHÁT SINH)
+    # ------------------------------------------
+    with tab3:
+        st.header("💰 Quản Lý Nhân Viên & Tiền Lương Phát Sinh")
+
+        df_payroll = pd.DataFrame(payroll_list)
+
+        if not df_payroll.empty:
+            df_payroll["Số tiền (VNĐ)"] = (
+                pd.to_numeric(df_payroll["Số tiền (VNĐ)"], errors="coerce")
+                .fillna(0)
+                .astype(int)
+            )
+
+            st.subheader("📋 Bảng Lịch Sử Yêu Cầu & Chi Phí Phát Sinh")
+            st.dataframe(df_payroll, use_container_width=True)
+
+            # Tổng kết lương theo từng nhân viên
+            st.subheader("📊 Tổng Kết Tiền Lương Cần Trả Cuối Tháng")
+            summary_df = (
+                df_payroll.groupby("Tên nhân viên")["Số tiền (VNĐ)"]
+                .sum()
+                .reset_index()
+            )
+            summary_df.columns = ["Tên nhân viên", "Tổng lương tích lũy"]
+
+            summary_df["Tổng lương tích lũy (VNĐ)"] = summary_df[
+                "Tổng lương tích lũy"
+            ].apply(lambda x: f"{x:,.0f} đ")
+            st.table(
+                summary_df[["Tên nhân viên", "Tổng lương tích lũy (VNĐ)"]]
+            )
+        else:
+            st.info("Chưa có phát sinh công việc hoặc tiền lương nào.")
+
+        st.divider()
+        col_p_add, col_p_manage = st.columns(2)
+
+        # 1. Khi có người yêu cầu làm việc -> Nhập công & số tiền lương vào
+        with col_p_add:
+            st.subheader("➕ Ghi nhận yêu cầu làm việc & Tiền lương")
+            with st.form("add_payroll_form"):
+                p_date = st.date_input("Ngày thực hiện / yêu cầu")
+                p_name = st.text_input("Tên nhân viên thực hiện").strip()
+                p_task = st.text_input("Nội dung yêu cầu / công việc")
+                p_salary = st.number_input(
+                    "Tiền công / Tiền lương cho yêu cầu này (VNĐ)",
+                    min_value=0,
+                    value=200000,
+                    step=50000,
+                )
+                btn_p_submit = st.form_submit_button("Lưu lại vào bảng lương")
+
+                if btn_p_submit and p_name and p_task:
+                    payroll_list.append({
+                        "Ngày": str(p_date),
+                        "Tên nhân viên": p_name,
+                        "Nội dung công việc": p_task,
+                        "Số tiền (VNĐ)": p_salary,
+                    })
+                    save_user_data(
+                        user, user_pass, gear_list, media_list, payroll_list
+                    )
+                    st.success(
+                        f"Đã ghi nhận công cho {p_name} với số tiền"
+                        f" {p_salary:,.0f}đ!"
+                    )
+                    st.rerun()
+
+        # 2. Quản lý (Xóa dòng ghi nhận lương an toàn bằng index)
+        with col_p_manage:
+            st.subheader("⚙️ Xóa / Điều chỉnh ghi nhận sai")
+            if payroll_list:
+                # Tạo danh sách các option kèm theo index gốc
+                options = []
+                for idx, item in enumerate(payroll_list):
+                    label = f"[{item.get('Ngày', '')}] - {item.get('Tên nhân viên', '')} ({item.get('Nội dung công việc', '')} - {int(item.get('Số tiền (VNĐ)', 0)):,.0f}đ)"
+                    options.append((idx, label))
+
+                # Sử dụng format_func để hiển thị nhãn nhưng giá trị thực nhận là cặp (index, label)
+                selected_option = st.selectbox(
+                    "Chọn dòng ghi nhận cần xóa",
+                    options,
+                    format_func=lambda x: x[1],
+                )
+                selected_index = selected_option[0]
+
+                if st.button("🗑️ Xóa dòng ghi nhận này", type="primary"):
+                    payroll_list.pop(selected_index)
+                    save_user_data(
+                        user, user_pass, gear_list, media_list, payroll_list
+                    )
+                    st.success("Đã xóa bản ghi thành công!")
+                    st.rerun()
+            else:
+                st.write("Không có dữ liệu để chỉnh sửa.")
