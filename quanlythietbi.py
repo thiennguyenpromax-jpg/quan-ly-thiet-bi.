@@ -52,11 +52,15 @@ def load_user_data(username):
         return None
 
 
-def save_user_data(username, password, gear, media, payroll=None, gmail=""):
-    """Thêm mới hoặc cập nhật dữ liệu user vào Supabase"""
+def save_user_data(
+    username, password, gear, media, payroll=None, gmail="", members=None
+):
+    """Thêm mới hoặc cập nhật dữ liệu user vào Supabase (hỗ trợ thêm danh sách members)"""
     try:
         if payroll is None:
             payroll = []
+        if members is None:
+            members = []
         data = {
             "username": username,
             "password": password,
@@ -64,6 +68,7 @@ def save_user_data(username, password, gear, media, payroll=None, gmail=""):
             "media": media,
             "payroll": payroll,
             "gmail": gmail,
+            "members": members,
         }
         supabase.table("user_data").upsert(data).execute()
     except Exception as e:
@@ -150,7 +155,7 @@ if not st.session_state.logged_in:
                         st.error("Tên đăng nhập này đã tồn tại!")
                     else:
                         save_user_data(
-                            reg_user, reg_pass, [], [], [], reg_gmail
+                            reg_user, reg_pass, [], [], [], reg_gmail, []
                         )
                         st.success(
                             "Đăng ký thành công! Bạn có thể chuyển sang tab Đăng"
@@ -191,6 +196,7 @@ if not st.session_state.logged_in:
                                 media=u_data.get("media", []),
                                 payroll=u_data.get("payroll", []),
                                 gmail=saved_gmail,
+                                members=u_data.get("members", []),
                             )
                             st.success(
                                 "🎉 Đổi mật khẩu thành công! Hãy sang tab Đăng"
@@ -215,6 +221,7 @@ else:
         "media": [],
         "payroll": [],
         "gmail": "",
+        "members": [],
     }
 
     gear_list = user_info.get("gear", [])
@@ -222,6 +229,7 @@ else:
     payroll_list = user_info.get("payroll", [])
     user_pass = user_info.get("password", "")
     current_gmail = user_info.get("gmail", "")
+    members_list = user_info.get("members", [])
 
     # Tiêu đề và nút Thoát tài khoản
     col_title, col_logout = st.columns([7, 3])
@@ -236,7 +244,6 @@ else:
                     not st.session_state.get("show_settings", False)
                 )
         with col_btn2:
-            # Sửa cơ chế bấm Thoát TK: Xóa sạch cả cookie lẫn session state lập tức
             if st.button("🚪 Thoát TK", type="primary"):
                 cookie_manager.delete("user_auth")
                 st.session_state.logged_in = False
@@ -270,6 +277,7 @@ else:
                         media=media_list,
                         payroll=payroll_list,
                         gmail=up_gmail.strip(),
+                        members=members_list,
                     )
                     st.success("✅ Cập nhật thông tin tài khoản thành công!")
                     st.rerun()
@@ -278,7 +286,7 @@ else:
     tab1, tab2, tab3 = st.tabs([
         "📦 1. Quản Lý Thiết Bị",
         "📁 2. Quản Lý File Video",
-        "💰 3. Quản Lý Tiền Lương",
+        "💰 3. Quản Lý Thành Viên & Tính Lương",
     ])
 
     # ------------------------------------------
@@ -352,6 +360,7 @@ else:
                         media_list,
                         payroll_list,
                         current_gmail,
+                        members_list,
                     )
                     st.success(f"Đã thêm: {g_name}")
                     st.rerun()
@@ -398,6 +407,7 @@ else:
                             media_list,
                             payroll_list,
                             current_gmail,
+                            members_list,
                         )
                         st.success(
                             f"Đã mang đi thêm {take_more} {selected_take}!"
@@ -448,6 +458,7 @@ else:
                             media_list,
                             payroll_list,
                             current_gmail,
+                            members_list,
                         )
                         st.success(
                             f"Đã cất {return_qty} {selected_return} về kho!"
@@ -515,6 +526,7 @@ else:
                                     media_list,
                                     payroll_list,
                                     current_gmail,
+                                    members_list,
                                 )
                                 st.success("Đã cập nhật!")
                                 st.rerun()
@@ -534,6 +546,7 @@ else:
                             media_list,
                             payroll_list,
                             current_gmail,
+                            members_list,
                         )
                         st.success(f"Đã xóa: {selected_m}")
                         st.rerun()
@@ -592,6 +605,7 @@ else:
                         media_list,
                         payroll_list,
                         current_gmail,
+                        members_list,
                     )
                     st.success("Đã lưu thành công!")
                     st.rerun()
@@ -651,6 +665,7 @@ else:
                                 media_list,
                                 payroll_list,
                                 current_gmail,
+                                members_list,
                             )
                             st.success("Đã cập nhật file!")
                             st.rerun()
@@ -672,15 +687,67 @@ else:
                             media_list,
                             payroll_list,
                             current_gmail,
+                            members_list,
                         )
                         st.success(f"Đã xóa: {selected_media}")
                         st.rerun()
 
     # ------------------------------------------
-    # TAB 3: QUẢN LÝ TIỀN LƯƠNG (THEO YÊU CẦU PHÁT SINH)
+    # TAB 3: QUẢN LÝ THÀNH VIÊN & TIỀN LƯƠNG
     # ------------------------------------------
     with tab3:
-        st.header("💰 Quản Lý Nhân Viên & Tiền Lương Phát Sinh")
+        st.header("👥 Quản Lý Thành Viên & Tính Lương")
+
+        # Cài đặt danh sách thành viên
+        with st.expander("⚙️ Cài đặt danh sách Thành viên", expanded=False):
+            col_m_view, col_m_add_box = st.columns(2)
+            with col_m_view:
+                st.write("Danh sách thành viên hiện tại:")
+                if members_list:
+                    for idx, m in enumerate(members_list):
+                        c1, c2 = st.columns([4, 1])
+                        c1.write(f"- {m}")
+                        if c2.button("Xóa", key=f"del_mem_{idx}"):
+                            members_list.pop(idx)
+                            save_user_data(
+                                user,
+                                user_pass,
+                                gear_list,
+                                media_list,
+                                payroll_list,
+                                current_gmail,
+                                members_list,
+                            )
+                            st.rerun()
+                else:
+                    st.info("Chưa có thành viên nào.")
+
+            with col_m_add_box:
+                with st.form("add_member_form"):
+                    new_member_name = st.text_input(
+                        "Thêm tên thành viên mới"
+                    ).strip()
+                    btn_add_member = st.form_submit_button(
+                        "➕ Thêm thành viên"
+                    )
+                    if btn_add_member and new_member_name:
+                        if new_member_name not in members_list:
+                            members_list.append(new_member_name)
+                            save_user_data(
+                                user,
+                                user_pass,
+                                gear_list,
+                                media_list,
+                                payroll_list,
+                                current_gmail,
+                                members_list,
+                            )
+                            st.success(f"Đã thêm thành viên: {new_member_name}")
+                            st.rerun()
+                        else:
+                            st.warning("Thành viên này đã tồn tại!")
+
+        st.divider()
 
         df_payroll = pd.DataFrame(payroll_list)
 
@@ -694,41 +761,48 @@ else:
             st.subheader("📋 Bảng Lịch Sử Yêu Cầu & Chi Phí Phát Sinh")
             st.dataframe(df_payroll, use_container_width=True)
 
-            # Tổng kết lương theo từng nhân viên
+            # Tổng kết lương theo từng thành viên
             st.subheader("📊 Tổng Kết Tiền Lương Cần Trả Cuối Tháng")
             summary_df = (
                 df_payroll.groupby("Tên nhân viên")["Số tiền (VNĐ)"]
                 .sum()
                 .reset_index()
             )
-            summary_df.columns = ["Tên nhân viên", "Tổng lương tích lũy"]
+            summary_df.columns = ["Thành viên", "Tổng lương tích lũy"]
 
             summary_df["Tổng lương tích lũy (VNĐ)"] = summary_df[
                 "Tổng lương tích lũy"
             ].apply(lambda x: f"{x:,.0f} đ")
-            st.table(
-                summary_df[["Tên nhân viên", "Tổng lương tích lũy (VNĐ)"]]
-            )
+            st.table(summary_df[["Thành viên", "Tổng lương tích lũy (VNĐ)"]])
         else:
             st.info("Chưa có phát sinh công việc hoặc tiền lương nào.")
 
         st.divider()
         col_p_add, col_p_manage = st.columns(2)
 
-        # 1. Ghi nhận công việc & lương phát sinh
+        # 1. Ghi nhận công việc & thêm tiền lương bằng dấu cộng (+)
         with col_p_add:
-            st.subheader("➕ Ghi nhận yêu cầu làm việc & Tiền lương")
+            st.subheader("➕ Thêm Tiền Lương / Khoản Phát Sinh")
             with st.form("add_payroll_form"):
                 p_date = st.date_input("Ngày thực hiện / yêu cầu")
-                p_name = st.text_input("Tên nhân viên thực hiện").strip()
-                p_task = st.text_input("Nội dung yêu cầu / công việc")
+
+                # Chọn thành viên từ danh sách đã cài đặt hoặc gõ tay nếu danh sách trống
+                if members_list:
+                    p_name = st.selectbox(
+                        "Chọn thành viên", members_list
+                    ).strip()
+                else:
+                    p_name = st.text_input(
+                        "Tên thành viên (Chưa có danh sách, hãy nhập tên)"
+                    ).strip()
+
+                p_task = st.text_input("Nội dung công việc / Khoản phát sinh")
                 p_salary = st.number_input(
-                    "Tiền công / Tiền lương cho yêu cầu này (VNĐ)",
-                    min_value=0,
-                    value=200000,
-                    step=50000,
+                    "Số tiền (VNĐ)", min_value=0, value=200000, step=50000
                 )
-                btn_p_submit = st.form_submit_button("Lưu lại vào bảng lương")
+                btn_p_submit = st.form_submit_button(
+                    "➕ Thêm khoản tiền lương này"
+                )
 
                 if btn_p_submit and p_name and p_task:
                     payroll_list.append({
@@ -744,10 +818,11 @@ else:
                         media_list,
                         payroll_list,
                         current_gmail,
+                        members_list,
                     )
                     st.success(
-                        f"Đã ghi nhận công cho {p_name} với số tiền"
-                        f" {p_salary:,.0f}đ!"
+                        f"Đã thêm khoản tiền cho **{p_name}** là"
+                        f" **{p_salary:,.0f}đ**!"
                     )
                     st.rerun()
 
@@ -776,6 +851,7 @@ else:
                         media_list,
                         payroll_list,
                         current_gmail,
+                        members_list,
                     )
                     st.success("Đã xóa bản ghi thành công!")
                     st.rerun()
