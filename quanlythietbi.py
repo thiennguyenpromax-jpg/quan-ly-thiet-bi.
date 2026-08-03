@@ -28,7 +28,7 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# Khởi tạo Cookie Manager để lưu phiên đăng nhập
+# Khởi tạo Cookie Manager
 cookie_manager = stx.CookieManager()
 
 
@@ -53,7 +53,7 @@ def load_user_data(username):
 
 
 def save_user_data(username, password, gear, media, payroll=None, gmail=""):
-    """Thêm mới hoặc cập nhật dữ liệu user vào Supabase (hỗ trợ thêm gmail)"""
+    """Thêm mới hoặc cập nhật dữ liệu user vào Supabase"""
     try:
         if payroll is None:
             payroll = []
@@ -78,8 +78,10 @@ if "logged_in" not in st.session_state:
 if "username" not in st.session_state:
     st.session_state.username = ""
 
-# Kiểm tra cookie để tự động đăng nhập khi mở lại trang
+# Đọc cookie đăng nhập
 auth_cookie = cookie_manager.get(cookie="user_auth")
+
+# Nếu chưa đăng nhập ở session nhưng có cookie hợp lệ -> tự động đăng nhập
 if not st.session_state.logged_in and auth_cookie:
     user_info = load_user_data(auth_cookie)
     if user_info:
@@ -147,7 +149,6 @@ if not st.session_state.logged_in:
                     if existing_user:
                         st.error("Tên đăng nhập này đã tồn tại!")
                     else:
-                        # Lưu tài khoản mới kèm theo gmail (nếu có)
                         save_user_data(
                             reg_user, reg_pass, [], [], [], reg_gmail
                         )
@@ -183,7 +184,6 @@ if not st.session_state.logged_in:
                             saved_gmail
                             and saved_gmail.lower() == f_gmail.lower()
                         ):
-                            # Cập nhật lại mật khẩu mới, giữ nguyên các dữ liệu cũ
                             save_user_data(
                                 username=f_user,
                                 password=f_new_pass,
@@ -236,8 +236,9 @@ else:
                     not st.session_state.get("show_settings", False)
                 )
         with col_btn2:
+            # Sửa cơ chế bấm Thoát TK: Xóa sạch cả cookie lẫn session state lập tức
             if st.button("🚪 Thoát TK", type="primary"):
-                cookie_manager.delete("user_auth", key="delete_cookie")
+                cookie_manager.delete("user_auth")
                 st.session_state.logged_in = False
                 st.session_state.username = ""
                 st.session_state.show_settings = False
