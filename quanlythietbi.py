@@ -698,18 +698,23 @@ else:
     with tab3:
         st.header("👥 Quản Lý Thành Viên & Tính Lương")
 
-        # Cài đặt danh sách thành viên (Đã tối ưu lại không dùng st.form lồng nhau gây lỗi)
+        # Cài đặt danh sách thành viên sử dụng Form chuẩn của Streamlit
         with st.expander("⚙️ Cài đặt danh sách Thành viên", expanded=True):
             col_m_view, col_m_add_box = st.columns(2)
 
             with col_m_view:
-                st.write("**Danh sách thành viên hiện tại:**")
+                st.write("**Xóa thành viên khỏi danh sách:**")
                 if members_list:
-                    for idx, m in enumerate(members_list):
-                        c1, c2 = st.columns([4, 1])
-                        c1.markdown(f"- {m}")
-                        if c2.button("Xóa", key=f"del_mem_{idx}"):
-                            members_list.pop(idx)
+                    with st.form("delete_member_form"):
+                        member_to_delete = st.selectbox(
+                            "Chọn thành viên cần xóa", members_list
+                        )
+                        btn_del_member = st.form_submit_button(
+                            "🗑️ Xóa thành viên này"
+                        )
+
+                        if btn_del_member and member_to_delete:
+                            members_list.remove(member_to_delete)
                             save_user_data(
                                 user,
                                 user_pass,
@@ -719,37 +724,42 @@ else:
                                 current_gmail,
                                 members_list,
                             )
-                            st.success(f"Đã xóa thành viên!")
+                            st.success(f"Đã xóa thành viên: {member_to_delete}")
                             st.rerun()
                 else:
                     st.info("Chưa có thành viên nào.")
 
             with col_m_add_box:
                 st.write("**Thêm thành viên mới:**")
-                new_member_name = st.text_input(
-                    "Tên thành viên mới",
-                    key="input_new_member_direct",
-                    placeholder="Nhập tên...",
-                ).strip()
-                if st.button("➕ Thêm thành viên", key="btn_add_member_direct"):
-                    if new_member_name:
-                        if new_member_name not in members_list:
-                            members_list.append(new_member_name)
-                            save_user_data(
-                                user,
-                                user_pass,
-                                gear_list,
-                                media_list,
-                                payroll_list,
-                                current_gmail,
-                                members_list,
-                            )
-                            st.success(f"Đã thêm thành viên: {new_member_name}")
-                            st.rerun()
+                with st.form("add_member_form"):
+                    new_member_name = st.text_input(
+                        "Tên thành viên mới", placeholder="Nhập tên..."
+                    ).strip()
+                    btn_add_member = st.form_submit_button(
+                        "➕ Thêm thành viên"
+                    )
+
+                    if btn_add_member:
+                        if new_member_name:
+                            if new_member_name not in members_list:
+                                members_list.append(new_member_name)
+                                save_user_data(
+                                    user,
+                                    user_pass,
+                                    gear_list,
+                                    media_list,
+                                    payroll_list,
+                                    current_gmail,
+                                    members_list,
+                                )
+                                st.success(
+                                    f"Đã thêm thành viên: {new_member_name}"
+                                )
+                                st.rerun()
+                            else:
+                                st.warning("Thành viên này đã tồn tại!")
                         else:
-                            st.warning("Thành viên này đã tồn tại!")
-                    else:
-                        st.warning("Vui lòng nhập tên thành viên!")
+                            st.warning("Vui lòng nhập tên thành viên!")
 
         st.divider()
 
