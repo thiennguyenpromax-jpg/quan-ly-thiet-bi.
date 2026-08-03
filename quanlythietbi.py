@@ -698,15 +698,16 @@ else:
     with tab3:
         st.header("👥 Quản Lý Thành Viên & Tính Lương")
 
-        # Cài đặt danh sách thành viên
-        with st.expander("⚙️ Cài đặt danh sách Thành viên", expanded=False):
+        # Cài đặt danh sách thành viên (Đã tối ưu lại không dùng st.form lồng nhau gây lỗi)
+        with st.expander("⚙️ Cài đặt danh sách Thành viên", expanded=True):
             col_m_view, col_m_add_box = st.columns(2)
+
             with col_m_view:
-                st.write("Danh sách thành viên hiện tại:")
+                st.write("**Danh sách thành viên hiện tại:**")
                 if members_list:
                     for idx, m in enumerate(members_list):
                         c1, c2 = st.columns([4, 1])
-                        c1.write(f"- {m}")
+                        c1.markdown(f"- {m}")
                         if c2.button("Xóa", key=f"del_mem_{idx}"):
                             members_list.pop(idx)
                             save_user_data(
@@ -718,19 +719,20 @@ else:
                                 current_gmail,
                                 members_list,
                             )
+                            st.success(f"Đã xóa thành viên!")
                             st.rerun()
                 else:
                     st.info("Chưa có thành viên nào.")
 
             with col_m_add_box:
-                with st.form("add_member_form"):
-                    new_member_name = st.text_input(
-                        "Thêm tên thành viên mới"
-                    ).strip()
-                    btn_add_member = st.form_submit_button(
-                        "➕ Thêm thành viên"
-                    )
-                    if btn_add_member and new_member_name:
+                st.write("**Thêm thành viên mới:**")
+                new_member_name = st.text_input(
+                    "Tên thành viên mới",
+                    key="input_new_member_direct",
+                    placeholder="Nhập tên...",
+                ).strip()
+                if st.button("➕ Thêm thành viên", key="btn_add_member_direct"):
+                    if new_member_name:
                         if new_member_name not in members_list:
                             members_list.append(new_member_name)
                             save_user_data(
@@ -746,6 +748,8 @@ else:
                             st.rerun()
                         else:
                             st.warning("Thành viên này đã tồn tại!")
+                    else:
+                        st.warning("Vui lòng nhập tên thành viên!")
 
         st.divider()
 
