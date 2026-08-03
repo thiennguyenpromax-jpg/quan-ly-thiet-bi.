@@ -52,7 +52,6 @@ def load_user_data(username):
         return None
 
 
-# Cập nhật hàm save để hỗ trợ thêm trường payroll (danh sách nhân viên & lương)
 def save_user_data(username, password, gear, media, payroll=None):
     """Thêm mới hoặc cập nhật dữ liệu user vào Supabase"""
     try:
@@ -138,7 +137,6 @@ if not st.session_state.logged_in:
                     if existing_user:
                         st.error("Tên đăng nhập này đã tồn tại!")
                     else:
-                        # Thêm cột payroll trống mặc định khi đăng ký
                         save_user_data(reg_user, reg_pass, [], [], [])
                         st.success(
                             "Đăng ký thành công! Bạn có thể đăng nhập ngay."
@@ -588,7 +586,7 @@ else:
         st.divider()
         col_p_add, col_p_manage = st.columns(2)
 
-        # 1. Khi có người yêu cầu làm việc -> Nhập công & số tiền lương vào
+        # 1. Ghi nhận công việc & lương phát sinh
         with col_p_add:
             st.subheader("➕ Ghi nhận yêu cầu làm việc & Tiền lương")
             with st.form("add_payroll_form"):
@@ -619,17 +617,15 @@ else:
                     )
                     st.rerun()
 
-        # 2. Quản lý (Xóa dòng ghi nhận lương an toàn bằng index)
+        # 2. Xóa ghi nhận lương an toàn bằng index
         with col_p_manage:
             st.subheader("⚙️ Xóa / Điều chỉnh ghi nhận sai")
             if payroll_list:
-                # Tạo danh sách các option kèm theo index gốc
                 options = []
                 for idx, item in enumerate(payroll_list):
                     label = f"[{item.get('Ngày', '')}] - {item.get('Tên nhân viên', '')} ({item.get('Nội dung công việc', '')} - {int(item.get('Số tiền (VNĐ)', 0)):,.0f}đ)"
                     options.append((idx, label))
 
-                # Sử dụng format_func để hiển thị nhãn nhưng giá trị thực nhận là cặp (index, label)
                 selected_option = st.selectbox(
                     "Chọn dòng ghi nhận cần xóa",
                     options,
