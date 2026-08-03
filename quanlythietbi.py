@@ -28,7 +28,7 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# Khởi tạo Cookie Manager để lưu phiên đăng nhập (Không dùng @st.cache_resource)
+# Khởi tạo Cookie Manager để lưu phiên đăng nhập
 cookie_manager = stx.CookieManager()
 
 
@@ -52,8 +52,8 @@ def load_user_data(username):
         return None
 
 
-def save_user_data(username, password, gear, media, payroll=None):
-    """Thêm mới hoặc cập nhật dữ liệu user vào Supabase"""
+def save_user_data(username, password, gear, media, payroll=None, gmail=""):
+    """Thêm mới hoặc cập nhật dữ liệu user vào Supabase (hỗ trợ thêm gmail)"""
     try:
         if payroll is None:
             payroll = []
@@ -63,6 +63,7 @@ def save_user_data(username, password, gear, media, payroll=None):
             "gear": gear,
             "media": media,
             "payroll": payroll,
+            "gmail": gmail,
         }
         supabase.table("user_data").upsert(data).execute()
     except Exception as e:
@@ -86,12 +87,17 @@ if not st.session_state.logged_in and auth_cookie:
         st.session_state.username = auth_cookie
 
 # ==========================================
-# MÀN HÌNH ĐĂNG NHẬP / ĐĂNG KÝ
+# MÀN HÌNH ĐĂNG NHẬP / ĐĂNG KÝ / QUÊN MẬT KHẨU
 # ==========================================
 if not st.session_state.logged_in:
-    st.title("🔐 Đăng Nhập Hệ Thống Quản Lý")
-    tab_login, tab_register = st.tabs(["🔑 Đăng nhập", "📝 Đăng ký tài khoản"])
+    st.title("🔐 Hệ Thống Quản Lý - Xác Thực")
+    tab_login, tab_register, tab_forgot = st.tabs([
+        "🔑 Đăng nhập",
+        "📝 Đăng ký tài khoản",
+        "❓ Quên mật khẩu",
+    ])
 
+    # --- TAB ĐĂNG NHẬP ---
     with tab_login:
         with st.form("login_form"):
             user_input = st.text_input("Tên đăng nhập").strip()
@@ -123,24 +129,80 @@ if not st.session_state.logged_in:
                 else:
                     st.error("Tài khoản không tồn tại!")
 
+    # --- TAB ĐĂNG KÝ ---
     with tab_register:
         with st.form("register_form"):
             reg_user = st.text_input("Tạo tên đăng nhập mới").strip()
             reg_pass = st.text_input("Tạo mật khẩu", type="password").strip()
+            reg_gmail = st.text_input(
+                "Liên kết Gmail (dùng để khôi phục mật khẩu sau này)"
+            ).strip()
             btn_reg = st.form_submit_button("Tạo tài khoản")
 
             if btn_reg:
                 if not reg_user or not reg_pass:
-                    st.warning("Vui lòng điền đầy đủ thông tin!")
+                    st.warning("Vui lòng điền đầy đủ tên đăng nhập và mật khẩu!")
                 else:
                     existing_user = load_user_data(reg_user)
                     if existing_user:
                         st.error("Tên đăng nhập này đã tồn tại!")
                     else:
-                        save_user_data(reg_user, reg_pass, [], [], [])
-                        st.success(
-                            "Đăng ký thành công! Bạn có thể đăng nhập ngay."
+                        # Lưu tài khoản mới kèm theo gmail (nếu có)
+                        save_user_data(
+                            reg_user, reg_pass, [], [], [], reg_gmail
                         )
+                        st.success(
+                            "Đăng ký thành công! Bạn có thể chuyển sang tab Đăng"
+                            " nhập."
+                        )
+
+    # --- TAB QUÊN MẬT KHẨU ---
+    with tab_forgot:
+        st.markdown(
+            "Nhập **Tên đăng nhập** và **Gmail đã liên kết** để đặt lại mật"
+            " khẩu mới."
+        )
+        with st.form("forgot_form"):
+            f_user = st.text_input("Tên đăng nhập cần khôi phục").strip()
+            f_gmail = st.text_input(
+                "Địa chỉ Gmail đã liên kết với tài khoản"
+            ).strip()
+            f_new_pass = st.text_input(
+                "Mật khẩu mới", type="password"
+            ).strip()
+            btn_reset = st.form_submit_button("Xác nhận đổi mật khẩu")
+
+            if btn_reset:
+                if not f_user or not f_gmail or not f_new_pass:
+                    st.warning("Vui lòng điền đầy đủ thông tin!")
+                else:
+                    u_data = load_user_data(f_user)
+                    if u_data:
+                        saved_gmail = str(u_data.get("gmail", "")).strip()
+                        if (
+                            saved_gmail
+                            and saved_gmail.lower() == f_gmail.lower()
+                        ):
+                            # Cập nhật lại mật khẩu mới, giữ nguyên các dữ liệu cũ
+                            save_user_data(
+                                username=f_user,
+                                password=f_new_pass,
+                                gear=u_data.get("gear", []),
+                                media=u_data.get("media", []),
+                                payroll=u_data.get("payroll", []),
+                                gmail=saved_gmail,
+                            )
+                            st.success(
+                                "🎉 Đổi mật khẩu thành công! Hãy sang tab Đăng"
+                                " nhập để sử dụng mật khẩu mới."
+                            )
+                        else:
+                            st.error(
+                                "❌ Gmail bạn nhập không khớp với Gmail đã liên"
+                                f" kết của tài khoản '{f_user}'!"
+                            )
+                    else:
+                        st.error("❌ Tên đăng nhập không tồn tại trong hệ thống!")
 
 # ==========================================
 # MÀN HÌNH CHÍNH (SAU KHI ĐĂNG NHẬP)
@@ -152,23 +214,65 @@ else:
         "gear": [],
         "media": [],
         "payroll": [],
+        "gmail": "",
     }
 
     gear_list = user_info.get("gear", [])
     media_list = user_info.get("media", [])
     payroll_list = user_info.get("payroll", [])
     user_pass = user_info.get("password", "")
+    current_gmail = user_info.get("gmail", "")
 
-    col_title, col_logout = st.columns([8, 2])
+    # Tiêu đề và nút Thoát tài khoản
+    col_title, col_logout = st.columns([7, 3])
     with col_title:
-        st.title(f"🎬 Quản Lý Thiết Bị, File & Tiền Lương - [{user}]")
+        st.title(f"🎬 Quản Lý Hệ Thống - [{user}]")
     with col_logout:
         st.write("")
-        if st.button("🚪 Đăng xuất"):
-            cookie_manager.delete("user_auth", key="delete_cookie")
-            st.session_state.logged_in = False
-            st.session_state.username = ""
-            st.rerun()
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button("⚙️ Cài đặt TK"):
+                st.session_state.show_settings = (
+                    not st.session_state.get("show_settings", False)
+                )
+        with col_btn2:
+            if st.button("🚪 Thoát TK", type="primary"):
+                cookie_manager.delete("user_auth", key="delete_cookie")
+                st.session_state.logged_in = False
+                st.session_state.username = ""
+                st.session_state.show_settings = False
+                st.rerun()
+
+    # KHU VỰC CÀI ĐẶT TÀI KHOẢN (Liên kết Gmail / Đổi mật khẩu)
+    if st.session_state.get("show_settings", False):
+        with st.expander("🛠️ Cài đặt tài khoản & Liên kết Gmail", expanded=True):
+            with st.form("update_account_form"):
+                st.write(f"Đang cấu hình cho tài khoản: **{user}**")
+                up_gmail = st.text_input(
+                    "Cập nhật / Liên kết Gmail",
+                    value=current_gmail if current_gmail else "",
+                )
+                up_pass = st.text_input(
+                    "Đổi mật khẩu mới (để trống nếu không đổi)",
+                    type="password",
+                )
+                btn_save_acc = st.form_submit_button("Lưu thay đổi tài khoản")
+
+                if btn_save_acc:
+                    final_pass = (
+                        up_pass.strip() if up_pass.strip() else user_pass
+                    )
+                    save_user_data(
+                        username=user,
+                        password=final_pass,
+                        gear=gear_list,
+                        media=media_list,
+                        payroll=payroll_list,
+                        gmail=up_gmail.strip(),
+                    )
+                    st.success("✅ Cập nhật thông tin tài khoản thành công!")
+                    st.rerun()
+        st.divider()
 
     tab1, tab2, tab3 = st.tabs([
         "📦 1. Quản Lý Thiết Bị",
@@ -241,7 +345,12 @@ else:
                         "Vị trí / Ghi chú": g_loc,
                     })
                     save_user_data(
-                        user, user_pass, gear_list, media_list, payroll_list
+                        user,
+                        user_pass,
+                        gear_list,
+                        media_list,
+                        payroll_list,
+                        current_gmail,
                     )
                     st.success(f"Đã thêm: {g_name}")
                     st.rerun()
@@ -287,6 +396,7 @@ else:
                             gear_list,
                             media_list,
                             payroll_list,
+                            current_gmail,
                         )
                         st.success(
                             f"Đã mang đi thêm {take_more} {selected_take}!"
@@ -336,6 +446,7 @@ else:
                             gear_list,
                             media_list,
                             payroll_list,
+                            current_gmail,
                         )
                         st.success(
                             f"Đã cất {return_qty} {selected_return} về kho!"
@@ -402,6 +513,7 @@ else:
                                     gear_list,
                                     media_list,
                                     payroll_list,
+                                    current_gmail,
                                 )
                                 st.success("Đã cập nhật!")
                                 st.rerun()
@@ -415,7 +527,12 @@ else:
                             if item["Tên thiết bị"] != selected_m
                         ]
                         save_user_data(
-                            user, user_pass, gear_list, media_list, payroll_list
+                            user,
+                            user_pass,
+                            gear_list,
+                            media_list,
+                            payroll_list,
+                            current_gmail,
                         )
                         st.success(f"Đã xóa: {selected_m}")
                         st.rerun()
@@ -468,7 +585,12 @@ else:
                         "Ghi chú": m_note,
                     })
                     save_user_data(
-                        user, user_pass, gear_list, media_list, payroll_list
+                        user,
+                        user_pass,
+                        gear_list,
+                        media_list,
+                        payroll_list,
+                        current_gmail,
                     )
                     st.success("Đã lưu thành công!")
                     st.rerun()
@@ -527,6 +649,7 @@ else:
                                 gear_list,
                                 media_list,
                                 payroll_list,
+                                current_gmail,
                             )
                             st.success("Đã cập nhật file!")
                             st.rerun()
@@ -542,7 +665,12 @@ else:
                             if item["Dự án / Tên Video"] != selected_media
                         ]
                         save_user_data(
-                            user, user_pass, gear_list, media_list, payroll_list
+                            user,
+                            user_pass,
+                            gear_list,
+                            media_list,
+                            payroll_list,
+                            current_gmail,
                         )
                         st.success(f"Đã xóa: {selected_media}")
                         st.rerun()
@@ -609,7 +737,12 @@ else:
                         "Số tiền (VNĐ)": p_salary,
                     })
                     save_user_data(
-                        user, user_pass, gear_list, media_list, payroll_list
+                        user,
+                        user_pass,
+                        gear_list,
+                        media_list,
+                        payroll_list,
+                        current_gmail,
                     )
                     st.success(
                         f"Đã ghi nhận công cho {p_name} với số tiền"
@@ -636,7 +769,12 @@ else:
                 if st.button("🗑️ Xóa dòng ghi nhận này", type="primary"):
                     payroll_list.pop(selected_index)
                     save_user_data(
-                        user, user_pass, gear_list, media_list, payroll_list
+                        user,
+                        user_pass,
+                        gear_list,
+                        media_list,
+                        payroll_list,
+                        current_gmail,
                     )
                     st.success("Đã xóa bản ghi thành công!")
                     st.rerun()
