@@ -33,7 +33,7 @@ cookie_manager = stx.CookieManager()
 
 
 # ------------------------------------------
-# 2. CÁC HÀM XỬ LÝ DỮ LIỆU CƠ SỞ DỮ LIỆU
+# 2. CÁC HÀM XỬ LÝ DỮ LIỆU CƠ SỞ DỮ LIỆU (KHÔNG DÙNG GMAIL)
 # ------------------------------------------
 def load_user_data(username):
     """Tải thông tin của 1 user cụ thể từ Supabase"""
@@ -52,10 +52,8 @@ def load_user_data(username):
         return None
 
 
-def save_user_data(
-    username, password, gear, media, payroll=None, gmail="", members=None
-):
-    """Thêm mới hoặc cập nhật dữ liệu user vào Supabase (hỗ trợ thêm danh sách members)"""
+def save_user_data(username, password, gear, media, payroll=None, members=None):
+    """Thêm mới hoặc cập nhật dữ liệu user vào Supabase (không bao gồm gmail)"""
     try:
         if payroll is None:
             payroll = []
@@ -67,7 +65,6 @@ def save_user_data(
             "gear": gear,
             "media": media,
             "payroll": payroll,
-            "gmail": gmail,
             "members": members,
         }
         supabase.table("user_data").upsert(data).execute()
@@ -94,14 +91,14 @@ if not st.session_state.logged_in and auth_cookie:
         st.session_state.username = auth_cookie
 
 # ==========================================
-# MÀN HÌNH ĐĂNG NHẬP / ĐĂNG KÝ / QUÊN MẬT KHẨU
+# MÀN HÌNH ĐĂNG NHẬP / ĐĂNG KÝ / ĐỔI MẬT KHẨU NHANH
 # ==========================================
 if not st.session_state.logged_in:
     st.title("🔐 Hệ Thống Quản Lý - Xác Thực")
     tab_login, tab_register, tab_forgot = st.tabs([
         "🔑 Đăng nhập",
         "📝 Đăng ký tài khoản",
-        "❓ Quên mật khẩu",
+        "❓ Đổi / Khôi phục mật khẩu",
     ])
 
     # --- TAB ĐĂNG NHẬP ---
@@ -141,9 +138,6 @@ if not st.session_state.logged_in:
         with st.form("register_form"):
             reg_user = st.text_input("Tạo tên đăng nhập mới").strip()
             reg_pass = st.text_input("Tạo mật khẩu", type="password").strip()
-            reg_gmail = st.text_input(
-                "Liên kết Gmail (dùng để khôi phục mật khẩu sau này)"
-            ).strip()
             btn_reg = st.form_submit_button("Tạo tài khoản")
 
             if btn_reg:
@@ -154,59 +148,43 @@ if not st.session_state.logged_in:
                     if existing_user:
                         st.error("Tên đăng nhập này đã tồn tại!")
                     else:
-                        save_user_data(
-                            reg_user, reg_pass, [], [], [], reg_gmail, []
-                        )
+                        save_user_data(reg_user, reg_pass, [], [], [], [])
                         st.success(
                             "Đăng ký thành công! Bạn có thể chuyển sang tab Đăng"
                             " nhập."
                         )
 
-    # --- TAB QUÊN MẬT KHẨU ---
+    # --- TAB ĐỔI / KHÔI PHỤC MẬT KHẨU (Dành cho gia đình) ---
     with tab_forgot:
         st.markdown(
-            "Nhập **Tên đăng nhập** và **Gmail đã liên kết** để đặt lại mật"
-            " khẩu mới."
+            "Vì web dùng nội bộ gia đình, bạn có thể nhập trực tiếp **Tên"
+            " đăng nhập** và đặt **Mật khẩu mới** ngay lập tức."
         )
         with st.form("forgot_form"):
-            f_user = st.text_input("Tên đăng nhập cần khôi phục").strip()
-            f_gmail = st.text_input(
-                "Địa chỉ Gmail đã liên kết với tài khoản"
-            ).strip()
+            f_user = st.text_input("Tên đăng nhập cần đổi mật khẩu").strip()
             f_new_pass = st.text_input(
-                "Mật khẩu mới", type="password"
+                "Mật khẩu mới muốn đổi", type="password"
             ).strip()
-            btn_reset = st.form_submit_button("Xác nhận đổi mật khẩu")
+            btn_reset = st.form_submit_button("Cập nhật mật khẩu mới")
 
             if btn_reset:
-                if not f_user or not f_gmail or not f_new_pass:
+                if not f_user or not f_new_pass:
                     st.warning("Vui lòng điền đầy đủ thông tin!")
                 else:
                     u_data = load_user_data(f_user)
                     if u_data:
-                        saved_gmail = str(u_data.get("gmail", "")).strip()
-                        if (
-                            saved_gmail
-                            and saved_gmail.lower() == f_gmail.lower()
-                        ):
-                            save_user_data(
-                                username=f_user,
-                                password=f_new_pass,
-                                gear=u_data.get("gear", []),
-                                media=u_data.get("media", []),
-                                payroll=u_data.get("payroll", []),
-                                gmail=saved_gmail,
-                                members=u_data.get("members", []),
-                            )
-                            st.success(
-                                "🎉 Đổi mật khẩu thành công! Hãy sang tab Đăng"
-                                " nhập để sử dụng mật khẩu mới."
-                            )
-                        else:
-                            st.error(
-                                "❌ Gmail bạn nhập không khớp với Gmail đã liên"
-                                f" kết của tài khoản '{f_user}'!"
-                            )
+                        save_user_data(
+                            username=f_user,
+                            password=f_new_pass,
+                            gear=u_data.get("gear", []),
+                            media=u_data.get("media", []),
+                            payroll=u_data.get("payroll", []),
+                            members=u_data.get("members", []),
+                        )
+                        st.success(
+                            f"🎉 Đổi mật khẩu cho tài khoản '{f_user}' thành"
+                            " công! Hãy sang tab Đăng nhập để sử dụng."
+                        )
                     else:
                         st.error("❌ Tên đăng nhập không tồn tại trong hệ thống!")
 
@@ -220,7 +198,6 @@ else:
         "gear": [],
         "media": [],
         "payroll": [],
-        "gmail": "",
         "members": [],
     }
 
@@ -228,7 +205,6 @@ else:
     media_list = user_info.get("media", [])
     payroll_list = user_info.get("payroll", [])
     user_pass = user_info.get("password", "")
-    current_gmail = user_info.get("gmail", "")
     members_list = user_info.get("members", [])
 
     # Tiêu đề và nút Thoát tài khoản
@@ -251,20 +227,16 @@ else:
                 st.session_state.show_settings = False
                 st.rerun()
 
-    # KHU VỰC CÀI ĐẶT TÀI KHOẢN (Liên kết Gmail / Đổi mật khẩu)
+    # KHU VỰC CÀI ĐẶT TÀI KHOẢN (Đổi mật khẩu nhanh khi đã đăng nhập)
     if st.session_state.get("show_settings", False):
-        with st.expander("🛠️ Cài đặt tài khoản & Liên kết Gmail", expanded=True):
+        with st.expander("🛠️ Cài đặt tài khoản & Đổi mật khẩu", expanded=True):
             with st.form("update_account_form"):
                 st.write(f"Đang cấu hình cho tài khoản: **{user}**")
-                up_gmail = st.text_input(
-                    "Cập nhật / Liên kết Gmail",
-                    value=current_gmail if current_gmail else "",
-                )
                 up_pass = st.text_input(
-                    "Đổi mật khẩu mới (để trống nếu không đổi)",
+                    "Nhập mật khẩu mới (để trống nếu giữ nguyên)",
                     type="password",
                 )
-                btn_save_acc = st.form_submit_button("Lưu thay đổi tài khoản")
+                btn_save_acc = st.form_submit_button("Lưu thay đổi mật khẩu")
 
                 if btn_save_acc:
                     final_pass = (
@@ -276,10 +248,9 @@ else:
                         gear=gear_list,
                         media=media_list,
                         payroll=payroll_list,
-                        gmail=up_gmail.strip(),
                         members=members_list,
                     )
-                    st.success("✅ Cập nhật thông tin tài khoản thành công!")
+                    st.success("✅ Cập nhật mật khẩu thành công!")
                     st.rerun()
         st.divider()
 
@@ -359,7 +330,6 @@ else:
                         gear_list,
                         media_list,
                         payroll_list,
-                        current_gmail,
                         members_list,
                     )
                     st.success(f"Đã thêm: {g_name}")
@@ -406,7 +376,6 @@ else:
                             gear_list,
                             media_list,
                             payroll_list,
-                            current_gmail,
                             members_list,
                         )
                         st.success(
@@ -457,7 +426,6 @@ else:
                             gear_list,
                             media_list,
                             payroll_list,
-                            current_gmail,
                             members_list,
                         )
                         st.success(
@@ -525,7 +493,6 @@ else:
                                     gear_list,
                                     media_list,
                                     payroll_list,
-                                    current_gmail,
                                     members_list,
                                 )
                                 st.success("Đã cập nhật!")
@@ -545,7 +512,6 @@ else:
                             gear_list,
                             media_list,
                             payroll_list,
-                            current_gmail,
                             members_list,
                         )
                         st.success(f"Đã xóa: {selected_m}")
@@ -604,7 +570,6 @@ else:
                         gear_list,
                         media_list,
                         payroll_list,
-                        current_gmail,
                         members_list,
                     )
                     st.success("Đã lưu thành công!")
@@ -664,7 +629,6 @@ else:
                                 gear_list,
                                 media_list,
                                 payroll_list,
-                                current_gmail,
                                 members_list,
                             )
                             st.success("Đã cập nhật file!")
@@ -686,7 +650,6 @@ else:
                             gear_list,
                             media_list,
                             payroll_list,
-                            current_gmail,
                             members_list,
                         )
                         st.success(f"Đã xóa: {selected_media}")
@@ -721,7 +684,6 @@ else:
                                 gear_list,
                                 media_list,
                                 payroll_list,
-                                current_gmail,
                                 members_list,
                             )
                             st.success(f"Đã xóa thành viên: {member_to_delete}")
@@ -749,7 +711,6 @@ else:
                                     gear_list,
                                     media_list,
                                     payroll_list,
-                                    current_gmail,
                                     members_list,
                                 )
                                 st.success(
@@ -832,7 +793,6 @@ else:
                             gear_list,
                             media_list,
                             payroll_list,
-                            current_gmail,
                             members_list,
                         )
                         st.success(
@@ -849,7 +809,6 @@ else:
             st.subheader("⚙️ Quản Lý / Xóa Khoản Chi")
             if payroll_list:
                 with st.form("delete_payroll_form"):
-                    # Tạo nhãn mô tả cho từng dòng dữ liệu lương để dễ chọn xóa
                     payroll_options = [
                         f"{i}: [{item.get('Ngày', '')}] - {item.get('Tên nhân viên', '')} - {item.get('Nội dung công việc', '')} ({item.get('Số tiền (VNĐ)', 0):,.0f}đ)"
                         for i, item in enumerate(payroll_list)
@@ -872,7 +831,6 @@ else:
                             gear_list,
                             media_list,
                             payroll_list,
-                            current_gmail,
                             members_list,
                         )
                         st.success(
