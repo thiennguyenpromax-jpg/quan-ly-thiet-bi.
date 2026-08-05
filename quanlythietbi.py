@@ -33,7 +33,7 @@ cookie_manager = stx.CookieManager()
 
 
 # ------------------------------------------
-# 2. CÁC HÀM XỬ LÝ DỮ LIỆU CƠ SỞ DỮ LIỆU
+# 2. CÁC HÀM XỬ LÝ DỮ LIỆU CƠ SỞ DỮ LIỆU (KHÔNG DÙNG GMAIL)
 # ------------------------------------------
 def load_user_data(username):
     """Tải thông tin của 1 user cụ thể từ Supabase"""
@@ -53,7 +53,7 @@ def load_user_data(username):
 
 
 def save_user_data(username, password, gear, media, payroll=None, members=None):
-    """Thêm mới hoặc cập nhật dữ liệu user vào Supabase"""
+    """Thêm mới hoặc cập nhật dữ liệu user vào Supabase (không bao gồm gmail)"""
     try:
         if payroll is None:
             payroll = []
@@ -80,8 +80,10 @@ if "logged_in" not in st.session_state:
 if "username" not in st.session_state:
     st.session_state.username = ""
 
+# Đọc cookie đăng nhập
 auth_cookie = cookie_manager.get(cookie="user_auth")
 
+# Nếu chưa đăng nhập ở session nhưng có cookie hợp lệ -> tự động đăng nhập
 if not st.session_state.logged_in and auth_cookie:
     user_info = load_user_data(auth_cookie)
     if user_info:
@@ -89,7 +91,7 @@ if not st.session_state.logged_in and auth_cookie:
         st.session_state.username = auth_cookie
 
 # ==========================================
-# MÀN HÌNH ĐĂNG NHẬP / ĐĂNG KÝ / ĐỔI MẬT KHẨU
+# MÀN HÌNH ĐĂNG NHẬP / ĐĂNG KÝ / ĐỔI MẬT KHẨU NHANH
 # ==========================================
 if not st.session_state.logged_in:
     st.title("🔐 Hệ Thống Quản Lý - Xác Thực")
@@ -99,6 +101,7 @@ if not st.session_state.logged_in:
         "❓ Đổi / Khôi phục mật khẩu",
     ])
 
+    # --- TAB ĐĂNG NHẬP ---
     with tab_login:
         with st.form("login_form"):
             user_input = st.text_input("Tên đăng nhập").strip()
@@ -130,6 +133,7 @@ if not st.session_state.logged_in:
                 else:
                     st.error("Tài khoản không tồn tại!")
 
+    # --- TAB ĐĂNG KÝ ---
     with tab_register:
         with st.form("register_form"):
             reg_user = st.text_input("Tạo tên đăng nhập mới").strip()
@@ -145,8 +149,12 @@ if not st.session_state.logged_in:
                         st.error("Tên đăng nhập này đã tồn tại!")
                     else:
                         save_user_data(reg_user, reg_pass, [], [], [], [])
-                        st.success("Đăng ký thành công! Hãy sang tab Đăng nhập.")
+                        st.success(
+                            "Đăng ký thành công! Bạn có thể chuyển sang tab Đăng"
+                            " nhập."
+                        )
 
+    # --- TAB ĐỔI / KHÔI PHỤC MẬT KHẨU (Dành cho gia đình) ---
     with tab_forgot:
         st.markdown(
             "Vì web dùng nội bộ gia đình, bạn có thể nhập trực tiếp **Tên"
@@ -175,10 +183,10 @@ if not st.session_state.logged_in:
                         )
                         st.success(
                             f"🎉 Đổi mật khẩu cho tài khoản '{f_user}' thành"
-                            " công!"
+                            " công! Hãy sang tab Đăng nhập để sử dụng."
                         )
                     else:
-                        st.error("❌ Tên đăng nhập không tồn tại!")
+                        st.error("❌ Tên đăng nhập không tồn tại trong hệ thống!")
 
 # ==========================================
 # MÀN HÌNH CHÍNH (SAU KHI ĐĂNG NHẬP)
@@ -199,6 +207,7 @@ else:
     user_pass = user_info.get("password", "")
     members_list = user_info.get("members", [])
 
+    # Tiêu đề và nút Thoát tài khoản
     col_title, col_logout = st.columns([7, 3])
     with col_title:
         st.title(f"🎬 Quản Lý Hệ Thống - [{user}]")
@@ -218,6 +227,7 @@ else:
                 st.session_state.show_settings = False
                 st.rerun()
 
+    # KHU VỰC CÀI ĐẶT TÀI KHOẢN (Đổi mật khẩu nhanh khi đã đăng nhập)
     if st.session_state.get("show_settings", False):
         with st.expander("🛠️ Cài đặt tài khoản & Đổi mật khẩu", expanded=True):
             with st.form("update_account_form"):
@@ -268,58 +278,24 @@ else:
                 .fillna(0)
                 .astype(int)
             )
-            df_gear["Số lần sử dụng"] = (
-                pd.to_numeric(df_gear.get("Số lần sử dụng", 0), errors="coerce")
-                .fillna(0)
-                .astype(int)
-            )
             df_gear["Còn dư ở nhà"] = (
                 df_gear["Tổng số lượng"] - df_gear["Đã mang đi"]
             )
-            df_gear["Trạng thái kho"] = df_gear["Còn dư ở nhà"].apply(
+            df_gear["Trạng thái"] = df_gear["Còn dư ở nhà"].apply(
                 lambda x: "🟢 Sẵn sàng"
                 if x > 0
                 else (
                     "🔴 Hết hàng / Đã mang đi" if x == 0 else "⚠️ Lỗi số lượng"
                 )
             )
-            if "Tình trạng máy" not in df_gear.columns:
-                df_gear["Tình trạng máy"] = "✨ Tốt"
 
-            # Khung tách riêng máy hỏng / cần bảo dưỡng
-            df_issues = df_gear[
-                df_gear["Tình trạng máy"].isin(
-                    ["🛠️ Cần bảo dưỡng", "❌ Hỏng / Lỗi"]
-                )
-            ]
-            if not df_issues.empty:
-                st.error(
-                    "⚠️ **CẢNH BÁO: CÓ THIẾT BỊ ĐANG GẶP VẤN ĐỀ / HỎNG HÓC!**"
-                    " (Được tách riêng khỏi kho chính)"
-                )
-                st.dataframe(
-                    df_issues[[
-                        "Tên thiết bị",
-                        "Tình trạng máy",
-                        "Tổng số lượng",
-                        "Đã mang đi",
-                        "Số lần sử dụng",
-                        "Vị trí / Ghi chú",
-                    ]],
-                    use_container_width=True,
-                )
-                st.markdown("---")
-
-            st.subheader("📋 Bảng Tổng Hợp Thiết Bị Kho")
             st.dataframe(
                 df_gear[[
                     "Tên thiết bị",
                     "Tổng số lượng",
                     "Đã mang đi",
                     "Còn dư ở nhà",
-                    "Trạng thái kho",
-                    "Tình trạng máy",
-                    "Số lần sử dụng",
+                    "Trạng thái",
                     "Vị trí / Ghi chú",
                 ]],
                 use_container_width=True,
@@ -338,10 +314,6 @@ else:
                 g_total = st.number_input(
                     "Tổng số lượng", min_value=1, value=1, step=1
                 )
-                g_status = st.selectbox(
-                    "Tình trạng máy",
-                    ["✨ Tốt", "🛠️ Cần bảo dưỡng", "❌ Hỏng / Lỗi"],
-                )
                 g_loc = st.text_input("Vị trí / Ghi chú")
                 btn_g_add = st.form_submit_button("Thêm thiết bị")
 
@@ -350,8 +322,6 @@ else:
                         "Tên thiết bị": g_name,
                         "Tổng số lượng": g_total,
                         "Đã mang đi": 0,
-                        "Số lần sử dụng": 0,
-                        "Tình trạng máy": g_status,
                         "Vị trí / Ghi chú": g_loc,
                     })
                     save_user_data(
@@ -400,13 +370,6 @@ else:
 
                     if btn_g_take and take_more > 0:
                         gear_list[t_idx]["Đã mang đi"] = curr_taken + take_more
-                        current_uses = int(
-                            gear_list[t_idx].get("Số lần sử dụng", 0)
-                        )
-                        gear_list[t_idx]["Số lần sử dụng"] = (
-                            current_uses + take_more
-                        )
-
                         save_user_data(
                             user,
                             user_pass,
@@ -508,32 +471,6 @@ else:
                             value=int(gear_list[m_idx]["Đã mang đi"]),
                             step=1,
                         )
-                        e_uses = st.number_input(
-                            "Số lần sử dụng",
-                            min_value=0,
-                            value=int(
-                                gear_list[m_idx].get("Số lần sử dụng", 0)
-                            ),
-                            step=1,
-                        )
-                        current_status = gear_list[m_idx].get(
-                            "Tình trạng máy", "✨ Tốt"
-                        )
-                        status_options = [
-                            "✨ Tốt",
-                            "🛠️ Cần bảo dưỡng",
-                            "❌ Hỏng / Lỗi",
-                        ]
-                        status_idx = (
-                            status_options.index(current_status)
-                            if current_status in status_options
-                            else 0
-                        )
-                        e_status = st.selectbox(
-                            "Tình trạng máy",
-                            status_options,
-                            index=status_idx,
-                        )
                         e_loc = st.text_input(
                             "Vị trí / Ghi chú",
                             value=str(gear_list[m_idx]["Vị trí / Ghi chú"]),
@@ -549,8 +486,6 @@ else:
                                 gear_list[m_idx]["Tên thiết bị"] = e_name
                                 gear_list[m_idx]["Tổng số lượng"] = e_total
                                 gear_list[m_idx]["Đã mang đi"] = e_taken
-                                gear_list[m_idx]["Số lần sử dụng"] = e_uses
-                                gear_list[m_idx]["Tình trạng máy"] = e_status
                                 gear_list[m_idx]["Vị trí / Ghi chú"] = e_loc
                                 save_user_data(
                                     user,
@@ -726,6 +661,7 @@ else:
     with tab3:
         st.header("👥 Quản Lý Thành Viên & Tính Lương")
 
+        # Cài đặt danh sách thành viên sử dụng Form chuẩn của Streamlit
         with st.expander("⚙️ Cài đặt danh sách Thành viên", expanded=True):
             col_m_view, col_m_add_box = st.columns(2)
 
@@ -750,9 +686,7 @@ else:
                                 payroll_list,
                                 members_list,
                             )
-                            st.success(
-                                f"Đã xóa thành viên: {member_to_delete}"
-                            )
+                            st.success(f"Đã xóa thành viên: {member_to_delete}")
                             st.rerun()
                 else:
                     st.info("Chưa có thành viên nào.")
@@ -802,6 +736,7 @@ else:
             st.subheader("📋 Bảng Lịch Sử Yêu Cầu & Chi Phí Phát Sinh")
             st.dataframe(df_payroll, use_container_width=True)
 
+            # Tổng kết lương theo từng thành viên
             st.subheader("📊 Tổng Kết Tiền Lương Cần Trả Cuối Tháng")
             summary_df = (
                 df_payroll.groupby("Tên nhân viên")["Số tiền (VNĐ)"]
@@ -820,11 +755,13 @@ else:
         st.divider()
         col_p_add, col_p_manage = st.columns(2)
 
+        # 1. Ghi nhận công việc & thêm tiền lương bằng dấu cộng (+)
         with col_p_add:
             st.subheader("➕ Thêm Tiền Lương / Khoản Phát Sinh")
             with st.form("add_payroll_form"):
                 p_date = st.date_input("Ngày thực hiện / yêu cầu")
 
+                # Chọn thành viên từ danh sách đã cài đặt hoặc gõ tay nếu danh sách trống
                 if members_list:
                     p_name = st.selectbox(
                         "Chọn thành viên", members_list
@@ -867,6 +804,7 @@ else:
                             "Vui lòng điền đầy đủ tên thành viên và nội dung!"
                         )
 
+        # 2. Quản lý (Xóa) dòng lương phát sinh
         with col_p_manage:
             st.subheader("⚙️ Quản Lý / Xóa Khoản Chi")
             if payroll_list:
@@ -879,14 +817,14 @@ else:
                         "Chọn mục cần xóa", payroll_options
                     )
                     btn_del_payroll = st.form_submit_button(
-                        "🗑️ Xóa khoản chi này"
+                        "🗑️ Xóa mục đã chọn"
                     )
 
-                    if btn_del_payroll:
-                        idx_to_del = int(
+                    if btn_del_payroll and selected_payroll_to_del:
+                        idx_to_remove = int(
                             selected_payroll_to_del.split(":")[0]
                         )
-                        payroll_list.pop(idx_to_del)
+                        removed_item = payroll_list.pop(idx_to_remove)
                         save_user_data(
                             user,
                             user_pass,
@@ -895,7 +833,9 @@ else:
                             payroll_list,
                             members_list,
                         )
-                        st.success("Đã xóa khoản chi thành công!")
+                        st.success(
+                            f"Đã xóa khoản chi của: {removed_item.get('Tên nhân viên', '')}"
+                        )
                         st.rerun()
             else:
-                st.info("Không có khoản chi nào để quản lý.")
+                st.info("Chưa có lịch sử bảng lương để quản lý.")
