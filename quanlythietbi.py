@@ -80,7 +80,6 @@ if "logged_in" not in st.session_state:
 if "username" not in st.session_state:
     st.session_state.username = ""
 
-# Đọc cookie đăng nhập
 auth_cookie = cookie_manager.get(cookie="user_auth")
 
 if not st.session_state.logged_in and auth_cookie:
@@ -90,7 +89,7 @@ if not st.session_state.logged_in and auth_cookie:
         st.session_state.username = auth_cookie
 
 # ==========================================
-# MÀN HÌNH ĐĂNG NHẬP / ĐĂNG KÝ / ĐỔI MẬT KHẨU NHANH
+# MÀN HÌNH ĐĂNG NHẬP / ĐĂNG KÝ / ĐỔI MẬT KHẨU
 # ==========================================
 if not st.session_state.logged_in:
     st.title("🔐 Hệ Thống Quản Lý - Xác Thực")
@@ -100,7 +99,6 @@ if not st.session_state.logged_in:
         "❓ Đổi / Khôi phục mật khẩu",
     ])
 
-    # --- TAB ĐĂNG NHẬP ---
     with tab_login:
         with st.form("login_form"):
             user_input = st.text_input("Tên đăng nhập").strip()
@@ -132,7 +130,6 @@ if not st.session_state.logged_in:
                 else:
                     st.error("Tài khoản không tồn tại!")
 
-    # --- TAB ĐĂNG KÝ ---
     with tab_register:
         with st.form("register_form"):
             reg_user = st.text_input("Tạo tên đăng nhập mới").strip()
@@ -150,7 +147,6 @@ if not st.session_state.logged_in:
                         save_user_data(reg_user, reg_pass, [], [], [], [])
                         st.success("Đăng ký thành công! Hãy sang tab Đăng nhập.")
 
-    # --- TAB ĐỔI / KHÔI PHỤC MẬT KHẨU ---
     with tab_forgot:
         st.markdown(
             "Vì web dùng nội bộ gia đình, bạn có thể nhập trực tiếp **Tên"
@@ -203,7 +199,6 @@ else:
     user_pass = user_info.get("password", "")
     members_list = user_info.get("members", [])
 
-    # Tiêu đề và nút Thoát tài khoản
     col_title, col_logout = st.columns([7, 3])
     with col_title:
         st.title(f"🎬 Quản Lý Hệ Thống - [{user}]")
@@ -223,7 +218,6 @@ else:
                 st.session_state.show_settings = False
                 st.rerun()
 
-    # KHU VỰC CÀI ĐẶT TÀI KHOẢN
     if st.session_state.get("show_settings", False):
         with st.expander("🛠️ Cài đặt tài khoản & Đổi mật khẩu", expanded=True):
             with st.form("update_account_form"):
@@ -292,7 +286,7 @@ else:
             if "Tình trạng máy" not in df_gear.columns:
                 df_gear["Tình trạng máy"] = "✨ Tốt"
 
-            # --- 1. KHUNG TÁCH RIÊNG: MÁY HỎNG / CẦN BẢO DƯỠNG ---
+            # Khung tách riêng máy hỏng / cần bảo dưỡng
             df_issues = df_gear[
                 df_gear["Tình trạng máy"].isin(
                     ["🛠️ Cần bảo dưỡng", "❌ Hỏng / Lỗi"]
@@ -316,7 +310,6 @@ else:
                 )
                 st.markdown("---")
 
-            # --- 2. BẢNG CHÍNH: TẤT CẢ HOẶC MÁY BÌNH THƯỜNG ---
             st.subheader("📋 Bảng Tổng Hợp Thiết Bị Kho")
             st.dataframe(
                 df_gear[[
